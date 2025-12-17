@@ -8,10 +8,9 @@ from .azure_openai_embedder import AzureOpenAICachedEmbedder
 from .ollama_embedder import OllamaCachedEmbedder
 
 
-def build_embedder(spec: EmbeddingSpec, *, sqlite_path: str):
+def build_embedder(spec: EmbeddingSpec):
     if spec.kind == "st":
         return SentenceTransformerCachedEmbedder(
-            sqlite_path=sqlite_path,
             name=spec.name,
             model_id=spec.model_id,
             device=spec.device,
@@ -21,7 +20,6 @@ def build_embedder(spec: EmbeddingSpec, *, sqlite_path: str):
 
     if spec.kind == "openai":
         return OpenAICachedEmbedder(
-            sqlite_path=sqlite_path,
             name=spec.name,
             model_id=spec.model_id,
             batch_size=spec.batch_size,
@@ -32,10 +30,9 @@ def build_embedder(spec: EmbeddingSpec, *, sqlite_path: str):
             project=spec.openai_project,
             dimensions=spec.dimensions,
         )
-    
+
     if spec.kind == "azure_openai":
         return AzureOpenAICachedEmbedder(
-            sqlite_path=sqlite_path,
             name=spec.name,
             model_id=spec.model_id,
             batch_size=spec.batch_size,
@@ -50,7 +47,6 @@ def build_embedder(spec: EmbeddingSpec, *, sqlite_path: str):
 
     if spec.kind == "ollama":
         return OllamaCachedEmbedder(
-            sqlite_path=sqlite_path,
             name=spec.name,
             model_id=spec.model_id,
             batch_size=spec.batch_size,

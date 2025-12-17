@@ -40,7 +40,6 @@ class DatasetSlices:
 @dataclass
 class RunConfig:
     run_dir: str
-    embeddings_db_path: str
 
     normal_label: str = "normal"
     borderline_label: str = "borderline"
@@ -249,7 +248,7 @@ class ExperimentRunner:
         }
 
     def _embed(self, emb_spec: EmbeddingSpec, texts: List[str]) -> Tuple[np.ndarray, float]:
-        embedder = build_embedder(emb_spec, sqlite_path=self.cfg.embeddings_db_path)
+        embedder = build_embedder(emb_spec)
         # CachedEmbedder.embed() returns (embeddings, seconds)
         X, dt = embedder.embed(texts, desc=f"embed[{emb_spec.name}]")
         return X, float(dt)

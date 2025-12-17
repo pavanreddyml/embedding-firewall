@@ -75,7 +75,6 @@ class AzureOpenAICachedEmbedder(CachedEmbedder):
     def __init__(
         self,
         *,
-        sqlite_path: str,
         name: str,
         # For Azure embeddings, this is typically the *deployment name*.
         model_id: str,
@@ -130,7 +129,6 @@ class AzureOpenAICachedEmbedder(CachedEmbedder):
             "dimensions": self.dimensions,
         }
         super().__init__(
-            sqlite_path=sqlite_path,
             name=name,
             model_id=model_id,
             batch_size=batch_size,

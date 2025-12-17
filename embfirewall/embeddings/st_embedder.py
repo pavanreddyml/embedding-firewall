@@ -17,7 +17,6 @@ class SentenceTransformerCachedEmbedder(CachedEmbedder):
     def __init__(
         self,
         *,
-        sqlite_path: str,
         name: str,
         model_id: str,
         device: str = "cpu",
@@ -34,7 +33,6 @@ class SentenceTransformerCachedEmbedder(CachedEmbedder):
 
         extra: Dict = {"device": self.device}
         super().__init__(
-            sqlite_path=sqlite_path,
             name=name,
             model_id=model_id,
             batch_size=batch_size,

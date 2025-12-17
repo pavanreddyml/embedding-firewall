@@ -33,8 +33,6 @@ STORAGE_DIR = COLAB_BASE_DIR if IN_COLAB else LOCAL_BASE_DIR
 
 DATA_DIR = str(Path(STORAGE_DIR) / "data")
 RUNS_DIR = str(Path(STORAGE_DIR) / "runs")
-EMBED_DB_PATH = str(Path(STORAGE_DIR) / "embeddings_cache.sqlite3")
-
 EVAL_CONFIG_PATH = str(Path(WORKING_DIR) / "configs" / "eval_config.yaml")
 # -----------------------------
 
@@ -127,7 +125,6 @@ def run_eval(
     eval_config: str = EVAL_CONFIG_PATH,
     runs_dir: str = RUNS_DIR,
     data_dir: str = DATA_DIR,
-    embed_db_path: str = EMBED_DB_PATH,
 ) -> None:
     """Run an embedding firewall experiment.
 
@@ -137,19 +134,16 @@ def run_eval(
 
     runs_dir_path = Path(runs_dir)
     data_dir_path = Path(data_dir)
-    embed_db_path_obj = Path(embed_db_path)
     eval_config_path = Path(eval_config)
 
     print(f"[run] IN_COLAB={IN_COLAB}")
     print(f"[run] WORKING_DIR={Path(WORKING_DIR).resolve()}")
     print(f"[run] DATA_DIR={data_dir_path}")
     print(f"[run] RUNS_DIR={runs_dir_path}")
-    print(f"[run] EMBED_DB_PATH={embed_db_path_obj}")
     print(f"[run] EVAL_CONFIG_PATH={eval_config_path}")
 
     runs_dir_path.mkdir(parents=True, exist_ok=True)
     data_dir_path.mkdir(parents=True, exist_ok=True)
-    embed_db_path_obj.parent.mkdir(parents=True, exist_ok=True)
 
     eval_cfg = _load_eval_config(str(eval_config_path))
 
@@ -220,7 +214,6 @@ def run_eval(
 
     cfg = RunConfig(
         run_dir=str(run_dir),
-        embeddings_db_path=str(embed_db_path_obj),
         normal_label=normal_label,
         borderline_label=borderline_label,
         malicious_label=malicious_label,
