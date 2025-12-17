@@ -1,6 +1,7 @@
-# file: run.py
+# file: run_eval.py
 from __future__ import annotations
 
+import argparse
 import time
 from pathlib import Path
 
@@ -37,6 +38,37 @@ EMBED_DB_PATH = str(Path(STORAGE_DIR) / "embeddings_cache.sqlite3")
 
 EVAL_CONFIG_PATH = str(Path(WORKING_DIR) / "configs" / "eval_config.yaml")
 # -----------------------------
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run embedding firewall experiments")
+    parser.add_argument(
+        "--eval-config",
+        type=str,
+        default=EVAL_CONFIG_PATH,
+        help="Path to eval_config.yaml (default: configs/eval_config.yaml)",
+    )
+    parser.add_argument(
+        "--runs-dir",
+        "--run-dir",
+        dest="runs_dir",
+        type=str,
+        default=RUNS_DIR,
+        help="Directory to write run outputs (default: runs)",
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=str,
+        default=DATA_DIR,
+        help="Directory containing dataset JSON files (default derived from STORAGE_DIR)",
+    )
+    parser.add_argument(
+        "--embed-db-path",
+        type=str,
+        default=EMBED_DB_PATH,
+        help="SQLite path for embedding cache (default derived from STORAGE_DIR)",
+    )
+    return parser.parse_args()
 
 
 def _counts(ls: list[str]) -> dict[str, int]:
@@ -79,6 +111,8 @@ def _parse_embeddings(cfg: dict) -> list[EmbeddingSpec]:
                 openai_base_url=e.get("openai_base_url"),
                 openai_organization=e.get("openai_organization"),
                 openai_project=e.get("openai_project"),
+                ollama_base_url=e.get("ollama_base_url", "http://localhost:11434"),
+                ollama_request_timeout=float(e.get("ollama_request_timeout", 120.0)),
             )
         )
     return out
@@ -122,18 +156,25 @@ def _load_test(data_dir: str, seed: int, cap: int | None) -> tuple[list[str], li
 
 
 def main() -> None:
+    args = _parse_args()
+
+    runs_dir = Path(args.runs_dir)
+    data_dir = Path(args.data_dir)
+    embed_db_path = Path(args.embed_db_path)
+    eval_config_path = Path(args.eval_config)
+
     print(f"[run] IN_COLAB={IN_COLAB}")
-    print(f"[run] BASE_DIR={BASE_DIR}")
-    print(f"[run] DATA_DIR={DATA_DIR}")
-    print(f"[run] RUNS_DIR={RUNS_DIR}")
-    print(f"[run] EMBED_DB_PATH={EMBED_DB_PATH}")
-    print(f"[run] EVAL_CONFIG_PATH={EVAL_CONFIG_PATH}")
+    print(f"[run] WORKING_DIR={Path(WORKING_DIR).resolve()}")
+    print(f"[run] DATA_DIR={data_dir}")
+    print(f"[run] RUNS_DIR={runs_dir}")
+    print(f"[run] EMBED_DB_PATH={embed_db_path}")
+    print(f"[run] EVAL_CONFIG_PATH={eval_config_path}")
 
-    Path(RUNS_DIR).mkdir(parents=True, exist_ok=True)
-    Path(DATA_DIR).mkdir(parents=True, exist_ok=True)
-    Path(EMBED_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    embed_db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    eval_cfg = _load_eval_config(EVAL_CONFIG_PATH)
+    eval_cfg = _load_eval_config(str(eval_config_path))
 
     # dataset settings from eval_config.yaml
     ds_cfg = eval_cfg.get("dataset") or {}
@@ -152,15 +193,15 @@ def main() -> None:
     )
 
     print("\n[run] Loading train_texts (normal only)")
-    train_texts = _load_train_normal(DATA_DIR, seed=seed, cap=max_train_normal_i)
+    train_texts = _load_train_normal(str(data_dir), seed=seed, cap=max_train_normal_i)
     print(f"[run] train_texts loaded: {len(train_texts)}")
 
     print("\n[run] Loading val (normal + malicious)")
-    val_texts, val_labels = _load_val(DATA_DIR, seed=seed + 1, cap=max_val_total_i)
+    val_texts, val_labels = _load_val(str(data_dir), seed=seed + 1, cap=max_val_total_i)
     print(f"[run] val loaded: n={len(val_texts)} counts={_counts(val_labels)}")
 
     print("\n[run] Loading test (normal + borderline + malicious)")
-    test_texts, test_labels = _load_test(DATA_DIR, seed=seed + 2, cap=max_test_total_i)
+    test_texts, test_labels = _load_test(str(data_dir), seed=seed + 2, cap=max_test_total_i)
     print(f"[run] test loaded: n={len(test_texts)} counts={_counts(test_labels)}")
 
     data = DatasetSlices(
@@ -171,7 +212,10 @@ def main() -> None:
         test_labels=test_labels,
     )
 
-    run_dir = Path(RUNS_DIR) / time.strftime("%Y%m%d_%H%M%S")
+    if args.runs_dir:
+        run_dir = Path(runs_dir) / time.strftime("%Y%m%d_%H%M%S")
+    else:
+        run_dir = Path(time.strftime("%Y%m%d_%H%M%S"))
     run_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n[run] run_dir={run_dir}")
 
@@ -199,7 +243,7 @@ def main() -> None:
 
     cfg = RunConfig(
         run_dir=str(run_dir),
-        embeddings_db_path=EMBED_DB_PATH,
+        embeddings_db_path=str(embed_db_path),
         normal_label=normal_label,
         borderline_label=borderline_label,
         malicious_label=malicious_label,

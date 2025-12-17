@@ -12,9 +12,32 @@ Key changes vs earlier versions:
 1) Install deps:
 - `pip install -r requirements.txt`
 
-2) Edit a dataset config (examples in `configs/`), then build:
+2) Make sure an Ollama server is running (default port `11434`). On Colab, start it in a background cell and pull the
+   embedding models once to avoid cold-start latency:
+   - `ollama pull nomic-embed-text`
+   - `ollama pull mxbai-embed-large`
+
+3) Edit a dataset config (examples in `configs/`), then build:
 - `python run.py`
   - This will build a dataset JSON (if missing) and then run experiments (optional toggles inside `run.py`).
+
+## Stronger paper-ready baselines (Ollama-first)
+
+The default `configs/eval_config.yaml` now targets **Ollama** embeddings so the full evaluation grid can run on Colab or
+any CPU box without pulling large Hugging Face checkpoints:
+
+- **Embeddings**: `nomic-embed-text` (fast/general) and `mxbai-embed-large` (higher-capacity). Both are served through
+  Ollama; the first request will trigger a download if the model is missing.
+- **Supervised detectors**: beside the standard logistic regression, try the class-balanced logistic variant,
+  a calibrated linear SVM (`linsvm_calibrated`), and a HistGradientBoostingClassifier (`hgbt`). These models are
+  better at carving out borderline prompts without letting false positives spike.
+
+Run `python run_eval.py --eval-config configs/eval_config.yaml --run-dir runs/ollama_baseline` once Ollama is up to
+capture plots/metrics for the paper. You can also override the dataset path or embedding cache location if you keep
+data on Google Drive:
+
+- `--data-dir /content/drive/MyDrive/research/embfirewall/data`
+- `--embed-db-path /content/drive/MyDrive/research/embfirewall/embeddings_cache.sqlite3`
 
 ## Dataset JSON format
 
