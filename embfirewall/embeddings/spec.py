@@ -21,7 +21,6 @@ class EmbeddingSpec:
         openai_project: Optional[str] = None,
         ollama_base_url: Optional[str] = "http://localhost:11434",
         ollama_request_timeout: float = 120.0,
-        ollama_options: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.kind = str(kind)  # "st" | "openai"
         self.name = str(name)
@@ -42,7 +41,6 @@ class EmbeddingSpec:
         # Ollama-only
         self.ollama_base_url = ollama_base_url
         self.ollama_request_timeout = float(ollama_request_timeout)
-        self.ollama_options = ollama_options or None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -59,5 +57,4 @@ class EmbeddingSpec:
             "openai_project": self.openai_project,
             "ollama_base_url": self.ollama_base_url,
             "ollama_request_timeout": self.ollama_request_timeout,
-            "ollama_options": self.ollama_options,
         }

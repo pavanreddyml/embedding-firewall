@@ -57,7 +57,6 @@ def build_embedder(spec: EmbeddingSpec, *, sqlite_path: str):
             normalize=spec.normalize,
             base_url=getattr(spec, "ollama_base_url", "http://localhost:11434"),
             request_timeout=getattr(spec, "ollama_request_timeout", 120.0),
-            options=getattr(spec, "ollama_options", None),
         )
 
     raise ValueError(f"Unknown embedding kind: {spec.kind}")

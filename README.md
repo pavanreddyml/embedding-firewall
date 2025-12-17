@@ -21,28 +21,19 @@ Key changes vs earlier versions:
 - `python run.py`
   - This will build a dataset JSON (if missing) and then run experiments (optional toggles inside `run.py`).
 
-## Stronger paper-ready baselines (Ollama-first)
+## Stronger paper-ready baselines
 
-The default `configs/eval_config.yaml` now targets **Ollama** embeddings so the full evaluation grid can run on Colab or
-any CPU box without pulling large Hugging Face checkpoints:
+The default `configs/eval_config.yaml` now includes higher-capacity options that noticeably improve separation between
+benign, borderline, and malicious prompts:
 
-- **Embeddings**: `nomic-embed-text` (fast/general) and `mxbai-embed-large` (higher-capacity). Both are served through
-  Ollama; the first request will trigger a download if the model is missing.
-- **GPU first**: the default `ollama_options.num_gpu=1` in `configs/eval_config.yaml` pushes embedding to GPU on Colab (or
-  any host with a CUDA-capable card). Increase `num_gpu` if you have multiple GPUs; drop the field if you want CPU-only.
+- **Embeddings**: add `BAAI/bge-large-en-v1.5` and `intfloat/e5-large-v2` (both normalized). They are slower on CPU but
+  deliver stronger semantic recall; if you have a GPU, set `device: cuda` to keep latency manageable.
 - **Supervised detectors**: beside the standard logistic regression, try the class-balanced logistic variant,
   a calibrated linear SVM (`linsvm_calibrated`), and a HistGradientBoostingClassifier (`hgbt`). These models are
   better at carving out borderline prompts without letting false positives spike.
 
-Run `python run_eval.py --eval-config configs/eval_config.yaml --run-dir runs/ollama_baseline` once Ollama is up to
-capture plots/metrics for the paper. You can also override the dataset path or embedding cache location if you keep
-data on Google Drive:
-
-- The default eval config caps each split at **3000** rows while you acquire/download the full datasets; set the caps to
-  `null` to remove limits once everything is available.
-
-- `--data-dir /content/drive/MyDrive/research/embfirewall/data`
-- `--embed-db-path /content/drive/MyDrive/research/embfirewall/embeddings_cache.sqlite3`
+Run `python run_eval.py --eval-config configs/eval_config.yaml --run-dir runs/baseline_upgrade` to execute the enlarged
+grid and capture plots/metrics for the paper.
 
 ## Dataset JSON format
 

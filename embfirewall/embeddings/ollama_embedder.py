@@ -1,7 +1,7 @@
 # file: embfirewall/embeddings/ollama_embedder.py
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Sequence
+from typing import Dict, Sequence
 
 import numpy as np
 import requests
@@ -25,11 +25,9 @@ class OllamaCachedEmbedder(CachedEmbedder):
         normalize: bool = True,
         base_url: str = "http://localhost:11434",
         request_timeout: float = 120.0,
-        options: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.base_url = str(base_url).rstrip("/") or "http://localhost:11434"
         self.request_timeout = float(request_timeout)
-        self.options = options.copy() if options else None
         super().__init__(
             sqlite_path=sqlite_path,
             name=name,
@@ -39,7 +37,6 @@ class OllamaCachedEmbedder(CachedEmbedder):
             extra_config={
                 "base_url": self.base_url,
                 "request_timeout": self.request_timeout,
-                "options": self.options,
             },
         )
 
@@ -54,9 +51,7 @@ class OllamaCachedEmbedder(CachedEmbedder):
         url = f"{self.base_url}/api/embeddings"
         vecs = []
         for t in texts:
-            payload: Dict[str, Any] = {"model": self.model_id, "prompt": t}
-            if self.options:
-                payload["options"] = self.options
+            payload: Dict[str, str] = {"model": self.model_id, "prompt": t}
             try:
                 resp = requests.post(url, json=payload, timeout=self.request_timeout)
             except Exception as exc:  # pragma: no cover - network/connection errors
