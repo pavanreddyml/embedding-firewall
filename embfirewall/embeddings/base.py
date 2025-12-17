@@ -227,32 +227,45 @@ class CachedEmbedder(ABC):
         to_insert: List[Tuple[str, str, np.ndarray]] = []
         results: List[Optional[np.ndarray]] = [None] * n
 
-        for (idx, text), h in zip(valid_pairs, hashes):
-            vec = cached.get(h)
-            if vec is not None:
-                results[idx] = vec.reshape(-1).copy()
-                fallback_dim = fallback_dim or int(vec.size)
-                continue
+        progress = tqdm(
+            total=len(valid_pairs),
+            desc=desc or "embed",
+            unit="text",
+            leave=False,
+        )
 
-            try:
-                batch_arr = np.asarray(self._encode_batch([text]), dtype=np.float32)
-                if batch_arr.ndim != 2 or batch_arr.shape[0] != 1:
-                    raise ValueError(
-                        f"Invalid embedding shape from {self.type_name()}: expected (1, d), got {tuple(batch_arr.shape)}"
+        try:
+            for (idx, text), h in zip(valid_pairs, hashes):
+                vec = cached.get(h)
+                if vec is not None:
+                    results[idx] = vec.reshape(-1).copy()
+                    fallback_dim = fallback_dim or int(vec.size)
+                    progress.update(1)
+                    continue
+
+                try:
+                    batch_arr = np.asarray(self._encode_batch([text]), dtype=np.float32)
+                    if batch_arr.ndim != 2 or batch_arr.shape[0] != 1:
+                        raise ValueError(
+                            f"Invalid embedding shape from {self.type_name()}: expected (1, d), got {tuple(batch_arr.shape)}"
+                        )
+                    vec = batch_arr[0]
+                    if self.normalize:
+                        vec = _l2_normalize(vec.reshape(1, -1))[0]
+                    vec = vec.reshape(-1).copy()
+                    fallback_dim = fallback_dim or int(vec.size)
+                    cached[h] = vec
+                    results[idx] = vec.copy()
+                    to_insert.append((h, text, vec))
+                except Exception as exc:  # pragma: no cover - network/remote failures
+                    tqdm.write(
+                        f"[warn] Failed to embed text at index {idx} via {self.type_name()}: {exc}"
                     )
-                vec = batch_arr[0]
-                if self.normalize:
-                    vec = _l2_normalize(vec.reshape(1, -1))[0]
-                vec = vec.reshape(-1).copy()
-                fallback_dim = fallback_dim or int(vec.size)
-                cached[h] = vec
-                results[idx] = vec.copy()
-                to_insert.append((h, text, vec))
-            except Exception as exc:  # pragma: no cover - network/remote failures
-                tqdm.write(
-                    f"[warn] Failed to embed text at index {idx} via {self.type_name()}: {exc}"
-                )
-                results[idx] = None
+                    results[idx] = None
+
+                progress.update(1)
+        finally:
+            progress.close()
 
         if to_insert:
             self._insert_cached(to_insert)
