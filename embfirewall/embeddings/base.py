@@ -192,107 +192,87 @@ class CachedEmbedder(ABC):
         )
         self._conn.commit()
 
+    def _infer_fallback_dim(self) -> Optional[int]:
+        try:
+            probe = np.asarray(self._encode_batch([""]))
+            if probe.ndim == 2 and probe.shape[0] == 1:
+                vec = probe[0].astype(np.float32)
+                if self.normalize:
+                    vec = _l2_normalize(vec.reshape(1, -1))[0]
+                return int(vec.size)
+        except Exception:
+            return None
+        return None
+
     def embed(self, texts: List[str], *, desc: str = "") -> Tuple[np.ndarray, float]:
         t0 = time.time()
         n = len(texts)
         if n == 0:
             return np.empty((0, 0), dtype=np.float32), 0.0
 
-        # Hashes (preserve order), plus unique list for cache ops
-        hashes = [_sha256_hex(t) for t in texts]
+        valid_pairs = [(idx, t) for idx, t in enumerate(texts) if isinstance(t, str)]
+        invalid_indices = [idx for idx, t in enumerate(texts) if not isinstance(t, str)]
+
+        hashes = [_sha256_hex(t) for _, t in valid_pairs]
         uniq_hashes = list(dict.fromkeys(hashes).keys())
 
-        # Map hash -> representative text (first occurrence)
-        hash_to_text: Dict[str, str] = {}
-        for h, t in zip(hashes, texts):
-            if h not in hash_to_text:
-                hash_to_text[h] = t
-
         cached = self._select_cached(uniq_hashes)
-        missing_hashes = [h for h in uniq_hashes if h not in cached]
+        for vec in cached.values():
+            if vec.size > 0:
+                fallback_dim = int(vec.size)
+                break
+        else:
+            fallback_dim = None
 
-        # Compute missing
         to_insert: List[Tuple[str, str, np.ndarray]] = []
-        failed_texts: List[str] = []
-        fallback_dim: Optional[int] = None
-        if missing_hashes:
-            missing_texts = [hash_to_text[h] for h in missing_hashes]
+        results: List[Optional[np.ndarray]] = [None] * n
 
-            bs = max(1, int(self.batch_size))
-            it = range(0, len(missing_texts), bs)
-            pbar = tqdm(it, desc=(desc or f"embed[{self.name}]"), unit="batch")
-            for start in pbar:
-                batch_texts = missing_texts[start : start + bs]
-                try:
-                    batch_arr = self._encode_batch(batch_texts)
-                    batch_arr = np.asarray(batch_arr, dtype=np.float32)
-                except Exception as exc:  # pragma: no cover - network/remote failures
-                    failed_texts.extend(batch_texts)
-                    pbar.write(
-                        f"[warn] Failed to embed batch of {len(batch_texts)} texts via {self.type_name()}: {exc}"
+        for (idx, text), h in zip(valid_pairs, hashes):
+            vec = cached.get(h)
+            if vec is not None:
+                results[idx] = vec.reshape(-1).copy()
+                fallback_dim = fallback_dim or int(vec.size)
+                continue
+
+            try:
+                batch_arr = np.asarray(self._encode_batch([text]), dtype=np.float32)
+                if batch_arr.ndim != 2 or batch_arr.shape[0] != 1:
+                    raise ValueError(
+                        f"Invalid embedding shape from {self.type_name()}: expected (1, d), got {tuple(batch_arr.shape)}"
                     )
-                    continue
-
-                if batch_arr.ndim != 2 or batch_arr.shape[0] != len(batch_texts):
-                    failed_texts.extend(batch_texts)
-                    pbar.write(
-                        "[warn] Invalid embedding shape from "
-                        f"{self.type_name()}: expected ({len(batch_texts)}, d), got {tuple(batch_arr.shape)}"
-                    )
-                    continue
-
-                if fallback_dim is None:
-                    fallback_dim = batch_arr.shape[1]
-                elif batch_arr.shape[1] != fallback_dim:
-                    failed_texts.extend(batch_texts)
-                    pbar.write(
-                        f"[warn] Dimension mismatch from {self.type_name()}: expected {fallback_dim}, got {batch_arr.shape[1]}"
-                    )
-                    continue
-
+                vec = batch_arr[0]
                 if self.normalize:
-                    batch_arr = _l2_normalize(batch_arr)
-
-                # stash
-                for t, vec in zip(batch_texts, batch_arr):
-                    h = _sha256_hex(t)
-                    cached[h] = vec.reshape(-1).copy()
-                    to_insert.append((h, t, vec.reshape(-1)))
-
-            if failed_texts:
-                if fallback_dim is None:
-                    raise RuntimeError(
-                        f"Embedding failed for {len(failed_texts)} texts via {self.type_name()} with no successful fallback dimension"
-                    )
-
-                pbar.write(
-                    f"[warn] Using zero-vector fallbacks for {len(failed_texts)} texts that failed to embed via {self.type_name()}"
+                    vec = _l2_normalize(vec.reshape(1, -1))[0]
+                vec = vec.reshape(-1).copy()
+                fallback_dim = fallback_dim or int(vec.size)
+                cached[h] = vec
+                results[idx] = vec.copy()
+                to_insert.append((h, text, vec))
+            except Exception as exc:  # pragma: no cover - network/remote failures
+                tqdm.write(
+                    f"[warn] Failed to embed text at index {idx} via {self.type_name()}: {exc}"
                 )
-                zeros = np.zeros((len(failed_texts), fallback_dim), dtype=np.float32)
-                for t, vec in zip(failed_texts, zeros):
-                    h = _sha256_hex(t)
-                    cached[h] = vec.reshape(-1).copy()
-                    to_insert.append((h, t, vec.reshape(-1)))
+                results[idx] = None
 
+        if to_insert:
             self._insert_cached(to_insert)
 
-        # Assemble output in input order
-        first = cached[hashes[0]]
-        d = int(first.size)
-        out = np.empty((n, d), dtype=np.float32)
-        for i, h in enumerate(hashes):
-            v = cached.get(h)
-            if v is None or v.size != d:
-                # extreme edge-case (corrupt cache row); recompute single
-                v2 = np.asarray(self._encode_batch([texts[i]]), dtype=np.float32)
-                if v2.shape[0] != 1:
-                    raise ValueError("single-item encode returned wrong shape")
-                if self.normalize:
-                    v2 = _l2_normalize(v2)
-                v = v2[0].reshape(-1).copy()
-                cached[h] = v
-                self._insert_cached([(h, texts[i], v)])
-            out[i] = v
+        if fallback_dim is None:
+            fallback_dim = self._infer_fallback_dim()
+        if fallback_dim is None:
+            raise RuntimeError(
+                "Unable to determine embedding dimension for zero-vector fallbacks"
+            )
+
+        zero_vec = np.zeros((fallback_dim,), dtype=np.float32)
+        for idx in invalid_indices:
+            results[idx] = zero_vec.copy()
+
+        for i, val in enumerate(results):
+            if val is None:
+                results[i] = zero_vec.copy()
+
+        out = np.vstack([vec.reshape(1, -1) for vec in results])
 
         dt = time.time() - t0
         return out, dt
