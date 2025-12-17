@@ -58,7 +58,7 @@ labels:
       - kind: hf
         name: wildjailbreak_vanilla_harmful
         dataset: walledai/WildJailbreak
-        subset: train
+        subset: default
         split: train
         streaming: true
         text_field: vanilla
@@ -70,7 +70,7 @@ labels:
       - kind: hf
         name: wildjailbreak_adversarial_harmful
         dataset: walledai/WildJailbreak
-        subset: train
+        subset: default
         split: train
         streaming: true
         text_field: adversarial
@@ -106,7 +106,7 @@ labels:
       - kind: hf
         name: wildjailbreak_vanilla_benign
         dataset: walledai/WildJailbreak
-        subset: train
+        subset: default
         split: train
         streaming: true
         text_field: vanilla
@@ -118,7 +118,7 @@ labels:
       - kind: hf
         name: wildjailbreak_adversarial_benign
         dataset: walledai/WildJailbreak
-        subset: train
+        subset: default
         split: train
         streaming: true
         text_field: adversarial
