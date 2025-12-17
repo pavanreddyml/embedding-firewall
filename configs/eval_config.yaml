@@ -34,31 +34,59 @@ keyword_baseline:
   #   - "confidential"
 
 embeddings:
-  # Ollama-only lineup with ample context for long (20k char) prompts and varied model sizes.
-  # Context windows are approximate token limits from model cards.
-  - kind: ollama
-    name: S1_ollama_bge_m3
-    model_id: bge-m3            # ~8k context, efficient small footprint
-    batch_size: 64
-    normalize: true
-
-  - kind: ollama
-    name: M1_ollama_snowflake_arctic
-    model_id: snowflake-arctic-embed  # ~8k context, balanced performance
-    batch_size: 48
-    normalize: true
-
-  - kind: ollama
-    name: G1_ollama_mxbai_large
-    model_id: mxbai-embed-large       # ~8k context, strong general quality
-    batch_size: 32
-    normalize: true
-
-  - kind: ollama
-    name: F1_ollama_jina_v3
-    model_id: jina-embeddings-v3      # ~8k context, high-capacity (fantastic)
+  # Hugging Face sentence-transformer models (min 10k context windows) ordered from average to amazing.
+  - kind: st
+    name: S1_hf_gte_qwen2_150M
+    model_id: Alibaba-NLP/gte-Qwen2-150M-instruct   # ~16k context, lightweight/average
+    device: cpu
     batch_size: 16
     normalize: true
+
+  - kind: st
+    name: M1_hf_gte_qwen2_1_5B
+    model_id: Alibaba-NLP/gte-Qwen2-1.5B-instruct   # ~32k context, good balance
+    device: cpu
+    batch_size: 8
+    normalize: true
+
+  - kind: st
+    name: G1_hf_nv_embed_v2
+    model_id: nvidia/NV-Embed-v2                    # ~16k context, great quality
+    device: cpu
+    batch_size: 6
+    normalize: true
+
+  - kind: st
+    name: F1_hf_jina_v3
+    model_id: jinaai/jina-embeddings-v3            # ~10k context, amazing capacity
+    device: cpu
+    batch_size: 4
+    normalize: true
+
+  # Ollama-only lineup (commented out for now) retained for quick switching.
+  # - kind: ollama
+  #   name: S1_ollama_bge_m3
+  #   model_id: bge-m3            # ~8k context, efficient small footprint
+  #   batch_size: 64
+  #   normalize: true
+  #
+  # - kind: ollama
+  #   name: M1_ollama_snowflake_arctic
+  #   model_id: snowflake-arctic-embed  # ~8k context, balanced performance
+  #   batch_size: 48
+  #   normalize: true
+  #
+  # - kind: ollama
+  #   name: G1_ollama_mxbai_large
+  #   model_id: mxbai-embed-large       # ~8k context, strong general quality
+  #   batch_size: 32
+  #   normalize: true
+  #
+  # - kind: ollama
+  #   name: F1_ollama_jina_v3
+  #   model_id: jina-embeddings-v3      # ~8k context, high-capacity (fantastic)
+  #   batch_size: 16
+  #   normalize: true
 
   # Previous non-Ollama options kept for quick switching if needed.
   # - kind: openai
