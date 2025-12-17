@@ -11,7 +11,7 @@ from .base import CachedEmbedder
 
 
 class OllamaCachedEmbedder(CachedEmbedder):
-    """Calls a running Ollama instance for embeddings (with SQLite caching).
+    """Calls a running Ollama instance for embeddings.
 
     Expects the Ollama HTTP API to be reachable (default: http://localhost:11434).
     """
@@ -19,7 +19,6 @@ class OllamaCachedEmbedder(CachedEmbedder):
     def __init__(
         self,
         *,
-        sqlite_path: str,
         name: str,
         model_id: str,
         batch_size: int = 8,
@@ -31,7 +30,6 @@ class OllamaCachedEmbedder(CachedEmbedder):
         self.request_timeout = float(request_timeout)
         self._model_checked = False
         super().__init__(
-            sqlite_path=sqlite_path,
             name=name,
             model_id=model_id,
             batch_size=batch_size,

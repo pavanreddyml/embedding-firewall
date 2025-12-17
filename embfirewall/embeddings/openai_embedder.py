@@ -88,7 +88,6 @@ class OpenAICachedEmbedder(CachedEmbedder):
     def __init__(
         self,
         *,
-        sqlite_path: str,
         name: str,
         model_id: str,
         batch_size: int = 128,
@@ -135,7 +134,6 @@ class OpenAICachedEmbedder(CachedEmbedder):
             "dimensions": self.dimensions,
         }
         super().__init__(
-            sqlite_path=sqlite_path,
             name=name,
             model_id=model_id,
             batch_size=batch_size,

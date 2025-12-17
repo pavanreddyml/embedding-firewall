@@ -1,24 +1,12 @@
 # file: embfirewall/embeddings/base.py
 from __future__ import annotations
 
-import hashlib
-import json
-import os
-import sqlite3
 import time
 from abc import ABC, abstractmethod
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 from tqdm import tqdm
-
-
-def _sha256_hex(s: str) -> str:
-    return hashlib.sha256(s.encode("utf-8")).hexdigest()
-
-
-def _json_dumps_sorted(obj: Dict) -> str:
-    return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _l2_normalize(x: np.ndarray, eps: float = 1e-12) -> np.ndarray:
@@ -30,15 +18,13 @@ def _l2_normalize(x: np.ndarray, eps: float = 1e-12) -> np.ndarray:
 
 class CachedEmbedder(ABC):
     """
-    Base class for embedders with SQLite caching.
-    Cache key = (model_key, text_hash).
-    Stores: text, config, embedding (float32 blob), dim, timestamps.
+    Base class for embedders without on-disk caching.
+    Handles batching, normalization, and fallback logic.
     """
 
     def __init__(
         self,
         *,
-        sqlite_path: str,
         name: str,
         model_id: str,
         batch_size: int = 64,
@@ -61,18 +47,6 @@ class CachedEmbedder(ABC):
             cfg.update(extra_config)
 
         self.config: Dict = cfg
-        self.model_key: str = _sha256_hex(_json_dumps_sorted(self.config))
-
-        self.sqlite_path = sqlite_path
-        os.makedirs(os.path.dirname(sqlite_path) or ".", exist_ok=True)
-
-        self._conn = sqlite3.connect(sqlite_path, timeout=60.0)
-        self._conn.execute("PRAGMA journal_mode=WAL;")
-        self._conn.execute("PRAGMA synchronous=NORMAL;")
-        self._conn.execute("PRAGMA temp_store=MEMORY;")
-        self._conn.execute("PRAGMA foreign_keys=ON;")
-        self._init_db()
-        self._upsert_model_row()
 
     @classmethod
     @abstractmethod
@@ -88,109 +62,7 @@ class CachedEmbedder(ABC):
         raise NotImplementedError
 
     def close(self) -> None:
-        try:
-            self._conn.close()
-        except Exception:
-            pass
-
-    def _init_db(self) -> None:
-        self._conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS models (
-                model_key   TEXT PRIMARY KEY,
-                name        TEXT,
-                config_json TEXT NOT NULL,
-                created_at  REAL NOT NULL
-            );
-            """
-        )
-        self._conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS embeddings (
-                model_key   TEXT NOT NULL,
-                text_hash   TEXT NOT NULL,
-                text        TEXT NOT NULL,
-                dim         INTEGER NOT NULL,
-                embedding   BLOB NOT NULL,
-                created_at  REAL NOT NULL,
-                PRIMARY KEY (model_key, text_hash),
-                FOREIGN KEY (model_key) REFERENCES models(model_key) ON DELETE CASCADE
-            );
-            """
-        )
-        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_embeddings_model ON embeddings(model_key);")
-        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_embeddings_hash ON embeddings(text_hash);")
-        self._conn.commit()
-
-    def _upsert_model_row(self) -> None:
-        cfg_json = _json_dumps_sorted(self.config)
-        now = time.time()
-        self._conn.execute(
-            """
-            INSERT INTO models(model_key, name, config_json, created_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(model_key) DO UPDATE SET
-              name=excluded.name,
-              config_json=excluded.config_json;
-            """,
-            (self.model_key, self.name, cfg_json, now),
-        )
-        self._conn.commit()
-
-    def _select_cached(self, text_hashes: List[str]) -> Dict[str, np.ndarray]:
-        if not text_hashes:
-            return {}
-
-        out: Dict[str, np.ndarray] = {}
-        # SQLite has a variable limit; stay conservative.
-        CHUNK = 900
-        cur = self._conn.cursor()
-        for i in range(0, len(text_hashes), CHUNK):
-            chunk = text_hashes[i : i + CHUNK]
-            qmarks = ",".join(["?"] * len(chunk))
-            rows = cur.execute(
-                f"""
-                SELECT text_hash, dim, embedding
-                FROM embeddings
-                WHERE model_key = ?
-                  AND text_hash IN ({qmarks});
-                """,
-                (self.model_key, *chunk),
-            ).fetchall()
-
-            for h, dim, blob in rows:
-                try:
-                    vec = np.frombuffer(blob, dtype=np.float32)
-                    if vec.size != int(dim):
-                        continue
-                    out[str(h)] = vec.copy()
-                except Exception:
-                    continue
-        return out
-
-    def _insert_cached(self, items: List[Tuple[str, str, np.ndarray]]) -> None:
-        # items: (text_hash, text, vec)
-        if not items:
-            return
-        now = time.time()
-        rows = []
-        for h, text, vec in items:
-            v = np.asarray(vec, dtype=np.float32).reshape(-1)
-            rows.append((self.model_key, h, text, int(v.size), sqlite3.Binary(v.tobytes()), now))
-
-        self._conn.executemany(
-            """
-            INSERT INTO embeddings(model_key, text_hash, text, dim, embedding, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(model_key, text_hash) DO UPDATE SET
-              text=excluded.text,
-              dim=excluded.dim,
-              embedding=excluded.embedding,
-              created_at=excluded.created_at;
-            """,
-            rows,
-        )
-        self._conn.commit()
+        return None
 
     def _infer_fallback_dim(self) -> Optional[int]:
         try:
@@ -213,18 +85,7 @@ class CachedEmbedder(ABC):
         valid_pairs = [(idx, t) for idx, t in enumerate(texts) if isinstance(t, str)]
         invalid_indices = [idx for idx, t in enumerate(texts) if not isinstance(t, str)]
 
-        hashes = [_sha256_hex(t) for _, t in valid_pairs]
-        uniq_hashes = list(dict.fromkeys(hashes).keys())
-
-        cached = self._select_cached(uniq_hashes)
-        for vec in cached.values():
-            if vec.size > 0:
-                fallback_dim = int(vec.size)
-                break
-        else:
-            fallback_dim = None
-
-        to_insert: List[Tuple[str, str, np.ndarray]] = []
+        fallback_dim: Optional[int] = None
         results: List[Optional[np.ndarray]] = [None] * n
 
         progress = tqdm(
@@ -235,40 +96,45 @@ class CachedEmbedder(ABC):
         )
 
         try:
-            for (idx, text), h in zip(valid_pairs, hashes):
-                vec = cached.get(h)
-                if vec is not None:
-                    results[idx] = vec.reshape(-1).copy()
-                    fallback_dim = fallback_dim or int(vec.size)
-                    progress.update(1)
-                    continue
+            for start in range(0, len(valid_pairs), self.batch_size):
+                batch_pairs = valid_pairs[start : start + self.batch_size]
+                batch_texts = [t for _, t in batch_pairs]
 
                 try:
-                    batch_arr = np.asarray(self._encode_batch([text]), dtype=np.float32)
-                    if batch_arr.ndim != 2 or batch_arr.shape[0] != 1:
+                    batch_arr = np.asarray(self._encode_batch(batch_texts), dtype=np.float32)
+                    if batch_arr.ndim != 2 or batch_arr.shape[0] != len(batch_texts):
                         raise ValueError(
-                            f"Invalid embedding shape from {self.type_name()}: expected (1, d), got {tuple(batch_arr.shape)}"
+                            f"Invalid embedding shape from {self.type_name()}: expected ({len(batch_texts)}, d), got {tuple(batch_arr.shape)}"
                         )
-                    vec = batch_arr[0]
                     if self.normalize:
-                        vec = _l2_normalize(vec.reshape(1, -1))[0]
-                    vec = vec.reshape(-1).copy()
-                    fallback_dim = fallback_dim or int(vec.size)
-                    cached[h] = vec
-                    results[idx] = vec.copy()
-                    to_insert.append((h, text, vec))
-                except Exception as exc:  # pragma: no cover - network/remote failures
-                    tqdm.write(
-                        f"[warn] Failed to embed text at index {idx} via {self.type_name()}: {exc}"
-                    )
-                    results[idx] = None
+                        batch_arr = _l2_normalize(batch_arr)
 
-                progress.update(1)
+                    fallback_dim = fallback_dim or int(batch_arr.shape[1])
+                    for (idx, _), vec in zip(batch_pairs, batch_arr):
+                        results[idx] = vec.reshape(-1).copy()
+                except Exception:
+                    for idx, text in batch_pairs:
+                        try:
+                            single_arr = np.asarray(self._encode_batch([text]), dtype=np.float32)
+                            if single_arr.ndim != 2 or single_arr.shape[0] != 1:
+                                raise ValueError(
+                                    f"Invalid embedding shape from {self.type_name()}: expected (1, d), got {tuple(single_arr.shape)}"
+                                )
+                            vec = single_arr[0]
+                            if self.normalize:
+                                vec = _l2_normalize(vec.reshape(1, -1))[0]
+                            vec = vec.reshape(-1).copy()
+                            fallback_dim = fallback_dim or int(vec.size)
+                            results[idx] = vec.copy()
+                        except Exception as exc:  # pragma: no cover - network/remote failures
+                            tqdm.write(
+                                f"[warn] Failed to embed text at index {idx} via {self.type_name()}: {exc}"
+                            )
+                            results[idx] = None
+
+                progress.update(len(batch_pairs))
         finally:
             progress.close()
-
-        if to_insert:
-            self._insert_cached(to_insert)
 
         if fallback_dim is None:
             fallback_dim = self._infer_fallback_dim()
