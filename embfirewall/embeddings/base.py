@@ -213,6 +213,8 @@ class CachedEmbedder(ABC):
 
         # Compute missing
         to_insert: List[Tuple[str, str, np.ndarray]] = []
+        failed_texts: List[str] = []
+        fallback_dim: Optional[int] = None
         if missing_hashes:
             missing_texts = [hash_to_text[h] for h in missing_hashes]
 
@@ -221,17 +223,53 @@ class CachedEmbedder(ABC):
             pbar = tqdm(it, desc=(desc or f"embed[{self.name}]"), unit="batch")
             for start in pbar:
                 batch_texts = missing_texts[start : start + bs]
-                batch_arr = self._encode_batch(batch_texts)
-                batch_arr = np.asarray(batch_arr, dtype=np.float32)
-                if batch_arr.ndim != 2 or batch_arr.shape[0] != len(batch_texts):
-                    raise ValueError(
-                        f"{self.type_name()}._encode_batch must return (n,d), got shape={tuple(batch_arr.shape)}"
+                try:
+                    batch_arr = self._encode_batch(batch_texts)
+                    batch_arr = np.asarray(batch_arr, dtype=np.float32)
+                except Exception as exc:  # pragma: no cover - network/remote failures
+                    failed_texts.extend(batch_texts)
+                    pbar.write(
+                        f"[warn] Failed to embed batch of {len(batch_texts)} texts via {self.type_name()}: {exc}"
                     )
+                    continue
+
+                if batch_arr.ndim != 2 or batch_arr.shape[0] != len(batch_texts):
+                    failed_texts.extend(batch_texts)
+                    pbar.write(
+                        "[warn] Invalid embedding shape from "
+                        f"{self.type_name()}: expected ({len(batch_texts)}, d), got {tuple(batch_arr.shape)}"
+                    )
+                    continue
+
+                if fallback_dim is None:
+                    fallback_dim = batch_arr.shape[1]
+                elif batch_arr.shape[1] != fallback_dim:
+                    failed_texts.extend(batch_texts)
+                    pbar.write(
+                        f"[warn] Dimension mismatch from {self.type_name()}: expected {fallback_dim}, got {batch_arr.shape[1]}"
+                    )
+                    continue
+
                 if self.normalize:
                     batch_arr = _l2_normalize(batch_arr)
 
                 # stash
                 for t, vec in zip(batch_texts, batch_arr):
+                    h = _sha256_hex(t)
+                    cached[h] = vec.reshape(-1).copy()
+                    to_insert.append((h, t, vec.reshape(-1)))
+
+            if failed_texts:
+                if fallback_dim is None:
+                    raise RuntimeError(
+                        f"Embedding failed for {len(failed_texts)} texts via {self.type_name()} with no successful fallback dimension"
+                    )
+
+                pbar.write(
+                    f"[warn] Using zero-vector fallbacks for {len(failed_texts)} texts that failed to embed via {self.type_name()}"
+                )
+                zeros = np.zeros((len(failed_texts), fallback_dim), dtype=np.float32)
+                for t, vec in zip(failed_texts, zeros):
                     h = _sha256_hex(t)
                     cached[h] = vec.reshape(-1).copy()
                     to_insert.append((h, t, vec.reshape(-1)))
