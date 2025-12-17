@@ -34,26 +34,44 @@ keyword_baseline:
   #   - "confidential"
 
 embeddings:
-  - kind: st
-    name: E1_minilm
-    model_id: sentence-transformers/all-MiniLM-L6-v2
-    device: cpu
-    batch_size: 128
+  # Run against Ollama (assumes `ollama serve` is already running, will pull models on first use)
+  - kind: ollama
+    name: O1_nomic_embed_text
+    model_id: nomic-embed-text
+    batch_size: 16
     normalize: true
+    ollama_base_url: http://localhost:11434
+    ollama_request_timeout: 240
 
-  - kind: st
-    name: E2_bge_base
-    model_id: BAAI/bge-base-en-v1.5
-    device: cpu
-    batch_size: 64
+  - kind: ollama
+    name: O2_mxbai_embed_large
+    model_id: mxbai-embed-large
+    batch_size: 8
     normalize: true
+    ollama_base_url: http://localhost:11434
+    ollama_request_timeout: 240
 
-  - kind: st
-    name: E3_multilingual
-    model_id: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
-    device: cpu
-    batch_size: 64
-    normalize: true
+  # Previous HuggingFace / sentence-transformers examples (commented out; re-enable if you prefer local HF models)
+  # - kind: st
+  #   name: E1_minilm
+  #   model_id: sentence-transformers/all-MiniLM-L6-v2
+  #   device: cpu
+  #   batch_size: 128
+  #   normalize: true
+
+  # - kind: st
+  #   name: E2_bge_base
+  #   model_id: BAAI/bge-base-en-v1.5
+  #   device: cpu
+  #   batch_size: 64
+  #   normalize: true
+
+  # - kind: st
+  #   name: E3_multilingual
+  #   model_id: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+  #   device: cpu
+  #   batch_size: 64
+  #   normalize: true
 
   # Example OpenAI embedding (requires OPENAI_API_KEY in env)
   # - kind: openai
@@ -125,6 +143,27 @@ detectors:
       C: 1.0
       max_iter: 2000
       name: logreg
+
+    - type: logreg
+      C: 0.3
+      max_iter: 4000
+      class_weight: balanced
+      name: logreg_balanced
+
+    - type: linsvm
+      C: 1.5
+      max_iter: 8000
+      class_weight: balanced
+      calibration_cv: 5
+      calibration_method: sigmoid
+      name: linsvm_calibrated
+
+    - type: hgbt
+      learning_rate: 0.06
+      max_depth: 10
+      max_iter: 450
+      l2_regularization: 0.1
+      name: hgbt
 
     # Example: try multiple regularization strengths
     # - type: logreg

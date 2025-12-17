@@ -2,7 +2,7 @@
 from .base import Detector
 from .factory import build_detector
 from .keywords import DEFAULT_PATTERNS, KeywordBaseline
-from .supervised import LogisticRegressionDetector
+from .supervised import GradientBoostingDetector, LinearSVMDetector, LogisticRegressionDetector
 from .unsupervised import (
     CentroidDistance,
     IsolationForestDetector,
@@ -19,6 +19,8 @@ __all__ = [
     "KeywordBaseline",
     "DEFAULT_PATTERNS",
     "LogisticRegressionDetector",
+    "LinearSVMDetector",
+    "GradientBoostingDetector",
     "CentroidDistance",
     "KNNDistance",
     "OneClassSVMDetector",
