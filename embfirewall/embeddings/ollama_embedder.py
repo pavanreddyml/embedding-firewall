@@ -1,6 +1,7 @@
 # file: embfirewall/embeddings/ollama_embedder.py
 from __future__ import annotations
 
+import json
 from typing import Dict, Sequence
 
 import numpy as np
@@ -28,6 +29,7 @@ class OllamaCachedEmbedder(CachedEmbedder):
     ) -> None:
         self.base_url = str(base_url).rstrip("/") or "http://localhost:11434"
         self.request_timeout = float(request_timeout)
+        self._model_checked = False
         super().__init__(
             sqlite_path=sqlite_path,
             name=name,
@@ -47,6 +49,8 @@ class OllamaCachedEmbedder(CachedEmbedder):
     def _encode_batch(self, texts: Sequence[str]) -> np.ndarray:
         if not texts:
             return np.empty((0, 0), dtype=np.float32)
+
+        self._ensure_model_available()
 
         url = f"{self.base_url}/api/embeddings"
         vecs = []
@@ -88,3 +92,71 @@ class OllamaCachedEmbedder(CachedEmbedder):
             arr[i] = v
 
         return arr
+
+    def _ensure_model_available(self) -> None:
+        if self._model_checked:
+            return
+
+        tags_url = f"{self.base_url}/api/tags"
+        try:
+            resp = requests.get(tags_url, timeout=self.request_timeout)
+        except Exception as exc:  # pragma: no cover - network/connection errors
+            raise RuntimeError(
+                f"Failed to reach Ollama at {tags_url} (ensure ollama serve is running): {exc}"
+            ) from exc
+
+        if resp.status_code == 200:
+            try:
+                models = resp.json().get("models", [])
+            except Exception as exc:  # pragma: no cover - unexpected payload
+                raise RuntimeError(
+                    f"Invalid response from Ollama tags endpoint for model={self.model_id}: {resp.text}"
+                ) from exc
+            if any(m.get("name") == self.model_id for m in models):
+                self._model_checked = True
+                return
+        elif resp.status_code != 404:
+            raise RuntimeError(
+                f"Ollama tags error (status {resp.status_code}) while checking model={self.model_id}: {resp.text}"
+            )
+
+        pull_url = f"{self.base_url}/api/pull"
+        try:
+            resp = requests.post(
+                pull_url,
+                json={"name": self.model_id},
+                timeout=self.request_timeout,
+                stream=True,
+            )
+        except Exception as exc:  # pragma: no cover - network/connection errors
+            raise RuntimeError(
+                f"Failed to reach Ollama at {pull_url} (ensure ollama serve is running): {exc}"
+            ) from exc
+
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"Ollama pull error (status {resp.status_code}) for model={self.model_id}: {resp.text}"
+            )
+
+        try:
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                try:
+                    payload = json.loads(line.decode("utf-8"))
+                except Exception:
+                    continue
+
+                if payload.get("error"):
+                    raise RuntimeError(
+                        f"Ollama pull error for model={self.model_id}: {payload['error']}"
+                    )
+                if payload.get("status") == "success":
+                    self._model_checked = True
+                    return
+        finally:
+            resp.close()
+
+        raise RuntimeError(
+            f"Ollama pull did not complete successfully for model={self.model_id}"
+        )
