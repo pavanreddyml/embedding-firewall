@@ -34,95 +34,62 @@ keyword_baseline:
   #   - "confidential"
 
 embeddings:
-  # Run against Ollama (assumes `ollama serve` is already running, will pull models on first use)
+  # Ollama-only lineup with ample context for long (20k char) prompts and varied model sizes.
+  # Context windows are approximate token limits from model cards.
   - kind: ollama
-    name: O1_nomic_embed_text
-    model_id: nomic-embed-text
-    batch_size: 16
+    name: S1_ollama_bge_m3
+    model_id: bge-m3            # ~8k context, efficient small footprint
+    batch_size: 64
     normalize: true
-    ollama_base_url: http://localhost:11434
-    ollama_request_timeout: 240
 
   - kind: ollama
-    name: O2_mxbai_embed_large
-    model_id: mxbai-embed-large
-    batch_size: 8
+    name: M1_ollama_snowflake_arctic
+    model_id: snowflake-arctic-embed  # ~8k context, balanced performance
+    batch_size: 48
     normalize: true
-    ollama_base_url: http://localhost:11434
-    ollama_request_timeout: 240
 
-  # Previous HuggingFace / sentence-transformers examples (commented out; re-enable if you prefer local HF models)
-  # - kind: st
-  #   name: E1_minilm
-  #   model_id: sentence-transformers/all-MiniLM-L6-v2
-  #   device: cpu
-  #   batch_size: 128
-  #   normalize: true
-
-  # - kind: st
-  #   name: E2_bge_base
-  #   model_id: BAAI/bge-base-en-v1.5
-  #   device: cpu
-  #   batch_size: 64
-  #   normalize: true
-
-  # - kind: st
-  #   name: E3_multilingual
-  #   model_id: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
-  #   device: cpu
-  #   batch_size: 64
-  #   normalize: true
-
-  - kind: st
-    name: E4_bge_large
-    model_id: BAAI/bge-large-en-v1.5
-    device: cpu
-    batch_size: 16
+  - kind: ollama
+    name: G1_ollama_mxbai_large
+    model_id: mxbai-embed-large       # ~8k context, strong general quality
+    batch_size: 32
     normalize: true
-    ollama_base_url: http://localhost:11434
-    ollama_request_timeout: 240
 
-  # Previous HuggingFace / sentence-transformers examples (commented out; re-enable if you prefer local HF models)
-  # - kind: st
-  #   name: E1_minilm
-  #   model_id: sentence-transformers/all-MiniLM-L6-v2
-  #   device: cpu
-  #   batch_size: 128
-  #   normalize: true
-
-  - kind: st
-    name: E5_e5_large_v2
-    model_id: intfloat/e5-large-v2
-    device: cpu
+  - kind: ollama
+    name: F1_ollama_jina_v3
+    model_id: jina-embeddings-v3      # ~8k context, high-capacity (fantastic)
     batch_size: 16
     normalize: true
 
-  # Example OpenAI embedding (requires OPENAI_API_KEY in env)
+  # Previous non-Ollama options kept for quick switching if needed.
   # - kind: openai
-  #   name: E4_openai_3_small
+  #   name: S1_openai_3_small
   #   model_id: text-embedding-3-small
   #   batch_size: 128
   #   normalize: true
   #   dimensions: 1536
   #   openai_api_key_env: OPENAI_API_KEY
-  #   # optional:
-  #   # openai_base_url: null
-  #   # openai_organization: null
-  #   # openai_project: null
-
-  # Example Azure OpenAI embedding (requires env vars below)
-  # - kind: azure_openai
-  #   name: E4_azure_3_small
-  #   model_id: text-embedding-3-small   # Azure *deployment name*
-  #   batch_size: 128
+  #
+  # - kind: openai
+  #   name: M1_openai_3_large
+  #   model_id: text-embedding-3-large
+  #   batch_size: 64
   #   normalize: true
-  #   dimensions: 1536
-  #   azure_openai_api_key_env: AZURE_OPENAI_API_KEY
-  #   azure_openai_endpoint_env: AZURE_OPENAI_ENDPOINT
-  #   azure_openai_api_version_env: AZURE_OPENAI_API_VERSION
-  #   # optional:
-  #   # azure_openai_endpoint: null          # overrides env if provided
-  #   # azure_openai_api_version: null       # overrides env if provided
+  #   dimensions: 3072
+  #   openai_api_key_env: OPENAI_API_KEY
+  #
+  # - kind: st
+  #   name: G1_bge_large
+  #   model_id: BAAI/bge-large-en-v1.5
+  #   device: cpu
+  #   batch_size: 16
+  #   normalize: true
+  #
+  # - kind: st
+  #   name: F1_e5_large_v2
+  #   model_id: intfloat/e5-large-v2
+  #   device: cpu
+  #   batch_size: 16
+  #   normalize: true
 
 detectors:
   enable_unsupervised: true
