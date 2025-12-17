@@ -1,0 +1,138 @@
+# file: configs/eval_config.yaml
+# Defines BOTH: dataset caps + evaluation grid (embeddings x detectors)
+
+dataset:
+  seed: 7
+  max_train_normal: 2000   # set to null for no cap
+  max_val_total: 2000      # set to null for no cap
+  max_test_total: 2000     # set to null for no cap
+  supervised_val_fit_frac: 0.5  # supervised baselines: fit on this fraction of val, calibrate thresholds on the rest
+
+labels:
+  normal_label: normal
+  borderline_label: borderline
+  malicious_label: malicious
+
+# FPR operating points calibrated on NORMAL validation rows (no test leakage)
+fpr_points: [0.05, 0.10]
+
+keyword_baseline:
+  enabled: true
+  # Optional override; if omitted, code uses DEFAULT_PATTERNS in embfirewall/detectors/keywords.py
+  # patterns:
+  #   - "ignore\\s+all\\s+previous"
+  #   - "forget\\s+all\\s+previous"
+  #   - "system\\s+prompt"
+  #   - "developer\\s+message"
+  #   - "jailbreak"
+  #   - "do\\s+anything\\s+now"
+  #   - "DAN\\b"
+  #   - "reveal\\s+the\\s+prompt"
+  #   - "bypass"
+  #   - "policy"
+  #   - "rules"
+  #   - "confidential"
+
+embeddings:
+  - kind: st
+    name: E1_minilm
+    model_id: sentence-transformers/all-MiniLM-L6-v2
+    device: cpu
+    batch_size: 128
+    normalize: true
+
+  - kind: st
+    name: E2_bge_base
+    model_id: BAAI/bge-base-en-v1.5
+    device: cpu
+    batch_size: 64
+    normalize: true
+
+  - kind: st
+    name: E3_multilingual
+    model_id: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+    device: cpu
+    batch_size: 64
+    normalize: true
+
+  # Example OpenAI embedding (requires OPENAI_API_KEY in env)
+  # - kind: openai
+  #   name: E4_openai_3_small
+  #   model_id: text-embedding-3-small
+  #   batch_size: 128
+  #   normalize: true
+  #   dimensions: 1536
+  #   openai_api_key_env: OPENAI_API_KEY
+  #   # optional:
+  #   # openai_base_url: null
+  #   # openai_organization: null
+  #   # openai_project: null
+
+  # Example Azure OpenAI embedding (requires env vars below)
+  # - kind: azure_openai
+  #   name: E4_azure_3_small
+  #   model_id: text-embedding-3-small   # Azure *deployment name*
+  #   batch_size: 128
+  #   normalize: true
+  #   dimensions: 1536
+  #   azure_openai_api_key_env: AZURE_OPENAI_API_KEY
+  #   azure_openai_endpoint_env: AZURE_OPENAI_ENDPOINT
+  #   azure_openai_api_version_env: AZURE_OPENAI_API_VERSION
+  #   # optional:
+  #   # azure_openai_endpoint: null          # overrides env if provided
+  #   # azure_openai_api_version: null       # overrides env if provided
+
+detectors:
+  enable_unsupervised: true
+  enable_supervised: true
+
+  # Each entry is passed to build_detector(spec)
+  unsupervised:
+    - type: centroid
+
+    - type: knn
+      k: 5
+      name: knn5
+
+    - type: knn
+      k: 10
+      name: knn10
+
+    - type: ocsvm
+      nu: 0.05
+      gamma: scale
+      name: ocsvm
+
+    - type: iforest
+      contamination: 0.05
+      n_estimators: 200
+      random_state: 7
+      name: iforest
+
+    - type: mahalanobis
+      name: mahal
+
+    - type: lof
+      n_neighbors: 35
+      name: lof35
+
+    - type: pca
+      n_components: 64
+      name: pca64
+
+  supervised:
+    - type: logreg
+      C: 1.0
+      max_iter: 2000
+      name: logreg
+
+    # Example: try multiple regularization strengths
+    # - type: logreg
+    #   C: 0.3
+    #   max_iter: 2000
+    #   name: logreg_C0.3
+    #
+    # - type: logreg
+    #   C: 3.0
+    #   max_iter: 2000
+    #   name: logreg_C3

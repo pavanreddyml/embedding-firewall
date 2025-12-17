@@ -1,0 +1,137 @@
+# file: configs/dataset_data.yaml
+seed: 7
+
+text_filters:
+  min_chars: 10
+  max_chars: 20000
+  normalize_ws: true
+
+labels:
+  normal:
+    sources:
+      # In-the-wild benign user prompts (credible "real" distribution)
+      - kind: hf
+        name: itw_regular_2023_12_25
+        dataset: TrustAIRLab/in-the-wild-jailbreak-prompts
+        subset: regular_2023_12_25
+        split: train
+        streaming: true
+        text_field: prompt
+        max_rows: 50000
+
+      # High-quality instruction/QA prompts
+      - kind: hf
+        name: openorca_question
+        dataset: Open-Orca/OpenOrca
+        split: train
+        streaming: true
+        text_field: question
+        max_rows: 50000
+
+      # Human-written prompter messages
+      - kind: hf
+        name: oasst1_prompter_en
+        dataset: OpenAssistant/oasst1
+        subset: default
+        split: train
+        streaming: true
+        text_field: text
+        filters:
+          eq:
+            role: prompter
+            lang: en
+        max_rows: 50000
+
+  malicious:
+    sources:
+      # In-the-wild jailbreak prompts (credible "real" attacks)
+      - kind: hf
+        name: itw_jailbreak_2023_12_25
+        dataset: TrustAIRLab/in-the-wild-jailbreak-prompts
+        subset: jailbreak_2023_12_25
+        split: train
+        streaming: true
+        text_field: prompt
+        max_rows: 50000
+
+      # WildJailbreak harmful prompts (vanilla + adversarial)
+      - kind: hf
+        name: wildjailbreak_vanilla_harmful
+        dataset: walledai/WildJailbreak
+        subset: train
+        split: train
+        streaming: true
+        text_field: vanilla
+        filters:
+          eq:
+            data_type: vanilla_harmful
+        max_rows: 50000
+
+      - kind: hf
+        name: wildjailbreak_adversarial_harmful
+        dataset: walledai/WildJailbreak
+        subset: train
+        split: train
+        streaming: true
+        text_field: adversarial
+        filters:
+          eq:
+            data_type: adversarial_harmful
+        max_rows: 50000
+
+      # Prompt-injection labeled data (explicitly malicious)
+      - kind: hf
+        name: prompt_injections_label1
+        dataset: deepset/prompt-injections
+        split: train
+        streaming: true
+        text_field: text
+        filters:
+          eq:
+            label: 1
+        max_rows: 50000
+
+  borderline:
+    sources:
+      # Designed for over-refusal: sensitive-looking but benign
+      - kind: hf
+        name: falsereject_train
+        dataset: AmazonScience/FalseReject
+        split: train
+        streaming: true
+        text_field: prompt
+        max_rows: 15000
+
+      # WildJailbreak benign counterparts (looks close to harmful distribution)
+      - kind: hf
+        name: wildjailbreak_vanilla_benign
+        dataset: walledai/WildJailbreak
+        subset: train
+        split: train
+        streaming: true
+        text_field: vanilla
+        filters:
+          eq:
+            data_type: vanilla_benign
+        max_rows: 50000
+
+      - kind: hf
+        name: wildjailbreak_adversarial_benign
+        dataset: walledai/WildJailbreak
+        subset: train
+        split: train
+        streaming: true
+        text_field: adversarial
+        filters:
+          eq:
+            data_type: adversarial_benign
+        max_rows: 50000
+
+      # Dual-use domain (optional diversity)
+      - kind: hf
+        name: cybersecurityqaa
+        dataset: Rowden/CybersecurityQAA
+        split: train
+        streaming: true
+        text_field: question
+        max_rows: 5000
