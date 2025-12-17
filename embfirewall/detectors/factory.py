@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any, Dict, Union
 
 from .base import Detector
-from .supervised import LogisticRegressionDetector
+from .supervised import GradientBoostingDetector, LinearSVMDetector, LogisticRegressionDetector
 from .unsupervised import (
     CentroidDistance,
     IsolationForestDetector,
@@ -68,5 +68,11 @@ def build_detector(spec: DetectorSpec) -> Detector:
 
     if t in ("logreg", "logisticregression", "logistic_regression"):
         return LogisticRegressionDetector(**cfg)
+
+    if t in ("linsvm", "linear_svm", "linsvm_calibrated"):
+        return LinearSVMDetector(**cfg)
+
+    if t in ("hgbt", "histgradientboosting", "hist_gbt", "gradient_boosting"):
+        return GradientBoostingDetector(**cfg)
 
     raise ValueError(f"Unknown detector type: {t}")
