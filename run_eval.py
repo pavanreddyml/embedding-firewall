@@ -79,6 +79,8 @@ def _parse_embeddings(cfg: dict) -> list[EmbeddingSpec]:
                 openai_base_url=e.get("openai_base_url"),
                 openai_organization=e.get("openai_organization"),
                 openai_project=e.get("openai_project"),
+                ollama_base_url=e.get("ollama_base_url", "http://localhost:11434"),
+                ollama_request_timeout=float(e.get("ollama_request_timeout", 120.0)),
             )
         )
     return out

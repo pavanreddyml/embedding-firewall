@@ -12,7 +12,12 @@ Key changes vs earlier versions:
 1) Install deps:
 - `pip install -r requirements.txt`
 
-2) Edit a dataset config (examples in `configs/`), then build:
+2) Make sure an Ollama server is running (default port `11434`). On Colab, start it in a background cell and pull the
+   embedding models once to avoid cold-start latency:
+   - `ollama pull nomic-embed-text`
+   - `ollama pull mxbai-embed-large`
+
+3) Edit a dataset config (examples in `configs/`), then build:
 - `python run.py`
   - This will build a dataset JSON (if missing) and then run experiments (optional toggles inside `run.py`).
 
