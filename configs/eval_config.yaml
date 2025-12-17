@@ -3,9 +3,9 @@
 
 dataset:
   seed: 7
-  max_train_normal: 2000   # set to null for no cap
-  max_val_total: 2000      # set to null for no cap
-  max_test_total: 2000     # set to null for no cap
+  max_train_normal: 3000   # set to null for no cap
+  max_val_total: 3000      # set to null for no cap
+  max_test_total: 3000     # set to null for no cap
   supervised_val_fit_frac: 0.5  # supervised baselines: fit on this fraction of val, calibrate thresholds on the rest
 
 labels:
@@ -79,6 +79,16 @@ embeddings:
     device: cpu
     batch_size: 16
     normalize: true
+    ollama_base_url: http://localhost:11434
+    ollama_request_timeout: 240
+
+  # Previous HuggingFace / sentence-transformers examples (commented out; re-enable if you prefer local HF models)
+  # - kind: st
+  #   name: E1_minilm
+  #   model_id: sentence-transformers/all-MiniLM-L6-v2
+  #   device: cpu
+  #   batch_size: 128
+  #   normalize: true
 
   - kind: st
     name: E5_e5_large_v2
