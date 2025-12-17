@@ -49,8 +49,13 @@ def main() -> None:
         normalize_ws=bool(tf_cfg.get("normalize_ws", True)),
     )
 
-    dl = DatasetDownloader(seed=SEED, text_filters=tf, flush_every=FLUSH_EVERY, overwrite=OVERWRITE)
+    dl = DatasetDownloader(
+        seed=SEED,
+        text_filters=tf,
+        flush_every=FLUSH_EVERY,
+        overwrite=OVERWRITE,
         shard_size=SHARD_SIZE,
+    )
 
     labels = cfg.get("labels") or {}
     if not labels:
