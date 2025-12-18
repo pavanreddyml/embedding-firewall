@@ -52,7 +52,7 @@ embeddings:
 
   - kind: st
     name: G1_hf_nv_embed_v2
-    model_id: nvidia/NV-Embed-v2                    # ~16k context, great quality
+    model_id: mixedbread-ai/mxbai-embed-large-v1   # ~8k context, strong public alternative
     device: cuda
     batch_size: 6
     normalize: true
