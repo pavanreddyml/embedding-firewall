@@ -43,6 +43,7 @@ STORAGE_DIR = COLAB_BASE_DIR if IN_COLAB else LOCAL_BASE_DIR
 
 DATA_DIR = str(Path(STORAGE_DIR) / "data")
 RUNS_DIR = str(Path(STORAGE_DIR) / "runs")
+EMBED_CACHE_DIR = str(Path(STORAGE_DIR) / "embedding_cache")
 EVAL_CONFIG_PATH = str(Path(WORKING_DIR) / "configs" / "eval_config.yaml")
 # -----------------------------
 
@@ -94,38 +95,41 @@ def _parse_embeddings(cfg: dict) -> list[EmbeddingSpec]:
     return out
 
 
-def _load_train_normal(data_dir: str, seed: int, cap: int | None) -> list[str]:
+def _load_train_normal(data_dir: str, seed: int, cap: int | None, *, max_chars: int | None) -> list[str]:
     texts, _labels = interleave_label_files(
         data_dir,
         labels=("normal",),
         per_label_cap=cap,
         total_cap=cap,
         seed=seed,
+        max_chars=max_chars,
         show_progress=True,
         desc="train_load[normal]",
     )
     return texts
 
 
-def _load_val(data_dir: str, seed: int, cap: int | None) -> tuple[list[str], list[str]]:
+def _load_val(data_dir: str, seed: int, cap: int | None, *, max_chars: int | None) -> tuple[list[str], list[str]]:
     return interleave_label_files(
         data_dir,
         labels=("normal", "malicious"),
         per_label_cap=None,
         total_cap=cap,
         seed=seed,
+        max_chars=max_chars,
         show_progress=True,
         desc="val_mix[normal+malicious]",
     )
 
 
-def _load_test(data_dir: str, seed: int, cap: int | None) -> tuple[list[str], list[str]]:
+def _load_test(data_dir: str, seed: int, cap: int | None, *, max_chars: int | None) -> tuple[list[str], list[str]]:
     return interleave_label_files(
         data_dir,
         labels=("normal", "borderline", "malicious"),
         per_label_cap=None,
         total_cap=cap,
         seed=seed,
+        max_chars=max_chars,
         show_progress=True,
         desc="test_mix[normal+borderline+malicious]",
     )
@@ -168,26 +172,32 @@ def run_eval(
     max_train_normal = ds_cfg.get("max_train_normal", 20000)
     max_val_total = ds_cfg.get("max_val_total", 20000)
     max_test_total = ds_cfg.get("max_test_total", 60000)
+    max_chars = ds_cfg.get("max_chars", 10000)
 
     max_train_normal_i = int(max_train_normal) if max_train_normal is not None else None
     max_val_total_i = int(max_val_total) if max_val_total is not None else None
     max_test_total_i = int(max_test_total) if max_test_total is not None else None
+    max_chars_i = int(max_chars) if max_chars is not None else None
 
     print(
         f"[run] dataset: seed={seed} "
-        f"max_train_normal={max_train_normal_i} max_val_total={max_val_total_i} max_test_total={max_test_total_i}"
+        f"max_train_normal={max_train_normal_i} max_val_total={max_val_total_i} max_test_total={max_test_total_i} max_chars={max_chars_i}"
     )
 
     print("\n[run] Loading train_texts (normal only)")
-    train_texts = _load_train_normal(str(data_dir_path), seed=seed, cap=max_train_normal_i)
+    train_texts = _load_train_normal(str(data_dir_path), seed=seed, cap=max_train_normal_i, max_chars=max_chars_i)
     print(f"[run] train_texts loaded: {len(train_texts)}")
 
     print("\n[run] Loading val (normal + malicious)")
-    val_texts, val_labels = _load_val(str(data_dir_path), seed=seed + 1, cap=max_val_total_i)
+    val_texts, val_labels = _load_val(
+        str(data_dir_path), seed=seed + 1, cap=max_val_total_i, max_chars=max_chars_i
+    )
     print(f"[run] val loaded: n={len(val_texts)} counts={_counts(val_labels)}")
 
     print("\n[run] Loading test (normal + borderline + malicious)")
-    test_texts, test_labels = _load_test(str(data_dir_path), seed=seed + 2, cap=max_test_total_i)
+    test_texts, test_labels = _load_test(
+        str(data_dir_path), seed=seed + 2, cap=max_test_total_i, max_chars=max_chars_i
+    )
     print(f"[run] test loaded: n={len(test_texts)} counts={_counts(test_labels)}")
 
     data = DatasetSlices(
@@ -254,6 +264,7 @@ def run_eval(
             malicious_label=malicious_label,
             fpr_points=fpr_points_t,  # type: ignore
             embedding_models=[emb_spec],
+            embedding_cache_dir=EMBED_CACHE_DIR,
             enable_keyword=enable_keyword,
             enable_unsupervised=enable_unsup,
             enable_supervised=enable_sup,
