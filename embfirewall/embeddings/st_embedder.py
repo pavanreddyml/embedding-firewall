@@ -22,6 +22,7 @@ class SentenceTransformerCachedEmbedder(CachedEmbedder):
         device: str = "cpu",
         batch_size: int = 64,
         normalize: bool = True,
+        trust_remote_code: bool = True,
     ) -> None:
         os.environ.setdefault("USE_TF", "0")  # avoid TensorFlow on environments like Colab
         os.environ.setdefault("TRANSFORMERS_NO_TF", "1")
@@ -30,9 +31,14 @@ class SentenceTransformerCachedEmbedder(CachedEmbedder):
         from sentence_transformers import SentenceTransformer  # type: ignore
 
         self.device = str(device)
-        self.model = SentenceTransformer(model_id, device=self.device)
+        self.trust_remote_code = bool(trust_remote_code)
+        self.model = SentenceTransformer(
+            model_id,
+            device=self.device,
+            trust_remote_code=self.trust_remote_code,
+        )
 
-        extra: Dict = {"device": self.device}
+        extra: Dict = {"device": self.device, "trust_remote_code": self.trust_remote_code}
         super().__init__(
             name=name,
             model_id=model_id,

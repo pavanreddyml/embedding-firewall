@@ -16,6 +16,7 @@ def build_embedder(spec: EmbeddingSpec):
             device=spec.device,
             batch_size=spec.batch_size,
             normalize=spec.normalize,
+            trust_remote_code=spec.trust_remote_code,
         )
 
     if spec.kind == "openai":

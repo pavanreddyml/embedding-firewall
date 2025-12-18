@@ -21,6 +21,7 @@ class EmbeddingSpec:
         openai_project: Optional[str] = None,
         ollama_base_url: Optional[str] = "http://localhost:11434",
         ollama_request_timeout: float = 120.0,
+        trust_remote_code: bool = True,
     ) -> None:
         self.kind = str(kind)  # "st" | "openai"
         self.name = str(name)
@@ -30,6 +31,7 @@ class EmbeddingSpec:
 
         # ST-only
         self.device = str(device)
+        self.trust_remote_code = bool(trust_remote_code)
 
         # OpenAI-only
         self.dimensions = int(dimensions) if dimensions is not None else None
@@ -50,6 +52,7 @@ class EmbeddingSpec:
             "batch_size": self.batch_size,
             "normalize": self.normalize,
             "device": self.device,
+            "trust_remote_code": self.trust_remote_code,
             "dimensions": self.dimensions,
             "openai_api_key_env": self.openai_api_key_env,
             "openai_base_url": self.openai_base_url,

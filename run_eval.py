@@ -83,6 +83,7 @@ def _parse_embeddings(cfg: dict) -> list[EmbeddingSpec]:
                 batch_size=int(e.get("batch_size", 64)),
                 normalize=bool(e.get("normalize", True)),
                 device=str(e.get("device", "cpu")),
+                trust_remote_code=bool(e.get("trust_remote_code", True)),
                 dimensions=(int(e["dimensions"]) if "dimensions" in e and e["dimensions"] is not None else None),
                 openai_api_key_env=str(e.get("openai_api_key_env", "OPENAI_API_KEY")),
                 openai_base_url=e.get("openai_base_url"),
