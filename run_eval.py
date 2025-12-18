@@ -290,6 +290,10 @@ def run_eval(
     enable_sup = bool(det_cfg.get("enable_supervised", True))
     unsup_list = det_cfg.get("unsupervised")
     sup_list = det_cfg.get("supervised")
+    unsup_pos_labels = det_cfg.get("unsupervised_positive_labels")
+    unsup_pos_labels_t = None
+    if isinstance(unsup_pos_labels, list) and unsup_pos_labels:
+        unsup_pos_labels_t = tuple(str(x) for x in unsup_pos_labels)
 
     for emb_spec in embeddings:
         model_dir_name = emb_spec.model_id.replace("/", "_")
@@ -312,6 +316,7 @@ def run_eval(
             enable_supervised=enable_sup,
             unsupervised_detectors=(list(unsup_list) if isinstance(unsup_list, list) else None),
             supervised_detectors=(list(sup_list) if isinstance(sup_list, list) else None),
+            unsupervised_positive_labels=unsup_pos_labels_t,
             keyword_patterns=(list(keyword_patterns) if isinstance(keyword_patterns, list) else None),
         )
 

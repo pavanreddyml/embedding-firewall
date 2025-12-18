@@ -123,6 +123,9 @@ embeddings:
 detectors:
   enable_unsupervised: true
   enable_supervised: true
+  # Default to treating both malicious and borderline as positive for unsupervised metrics
+  # so anomaly detectors aren't penalized for flagging borderline prompts as outliers.
+  unsupervised_positive_labels: [malicious, borderline]
 
   # Each entry is passed to build_detector(spec)
   unsupervised:

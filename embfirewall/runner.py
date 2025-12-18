@@ -23,6 +23,10 @@ def _y_binary(label: str, malicious_label: str) -> int:
     return 1 if label == malicious_label else 0
 
 
+def _y_multi(label: str, positive_labels: Tuple[str, ...]) -> int:
+    return 1 if label in positive_labels else 0
+
+
 @dataclass
 class DatasetSlices:
     train_texts: List[str]
@@ -65,6 +69,10 @@ class RunConfig:
     supervised_detectors: Optional[List[Dict[str, Any]]] = None
     keyword_patterns: Optional[List[str]] = None
 
+    # Metrics for unsupervised/keyword runs can optionally widen the positive set beyond malicious.
+    # Defaults to (malicious_label,) to preserve prior behavior.
+    unsupervised_positive_labels: Optional[Tuple[str, ...]] = None
+
     def __post_init__(self) -> None:
         if self.embedding_models is None:
             self.embedding_models = [
@@ -103,6 +111,9 @@ class RunConfig:
                 {"type": "logreg", "C": 1.0, "name": "logreg"},
             ]
 
+        if self.unsupervised_positive_labels is None:
+            self.unsupervised_positive_labels = (self.malicious_label,)
+
 
 def ensure_parent_dir(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -137,6 +148,9 @@ class ExperimentRunner:
 
         self.val_y = np.array([_y_binary(x, cfg.malicious_label) for x in data.val_labels], dtype=np.int32)
         self.test_y = np.array([_y_binary(x, cfg.malicious_label) for x in data.test_labels], dtype=np.int32)
+        self.unsup_test_y = np.array(
+            [_y_multi(x, cfg.unsupervised_positive_labels) for x in data.test_labels], dtype=np.int32
+        )
 
         self.val_is_normal = np.array([x == cfg.normal_label for x in data.val_labels], dtype=bool)
         self.test_is_normal = np.array([x == cfg.normal_label for x in data.test_labels], dtype=bool)
@@ -309,6 +323,7 @@ class ExperimentRunner:
                 "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
                 "threshold_calibration_set": self.cfg.threshold_calibration_set,
                 "supervised_val_fit_frac": float(self.cfg.supervised_val_fit_frac),
+                "unsupervised_positive_labels": list(self.cfg.unsupervised_positive_labels),
             },
             "dataset": {
                 "train_n": len(self.data.train_texts),
@@ -328,6 +343,10 @@ class ExperimentRunner:
             "runs": [],
         }
 
+        print(
+            f"[runner] Unsupervised metrics positive labels: {self.cfg.unsupervised_positive_labels}"
+        )
+
         # Keyword baseline
         if self.cfg.enable_keyword:
             patterns = self.cfg.keyword_patterns or DEFAULT_PATTERNS
@@ -344,6 +363,7 @@ class ExperimentRunner:
                 cal_normals = scores_val[self.val_is_normal]
 
             m = self._metrics_summary(self.test_y, scores_test)
+            m_unsup = self._metrics_summary(self.unsup_test_y, scores_test)
 
             op: Dict[str, Any] = {}
             for fpr_target in self.cfg.fpr_points:
@@ -357,6 +377,7 @@ class ExperimentRunner:
                     "detector": "keyword",
                     "detector_spec": {"patterns": patterns},
                     "metrics": m,
+                    "metrics_unsup_labels": m_unsup,
                     "operating_points": op,
                     "latency_s": {"detector": None, "total": None},
                 }
@@ -410,6 +431,7 @@ class ExperimentRunner:
                         cal_normals = scores_val[self.val_is_normal]
 
                     m = self._metrics_summary(self.test_y, scores_test)
+                    m_unsup = self._metrics_summary(self.unsup_test_y, scores_test)
 
                     op: Dict[str, Any] = {}
                     for fpr_target in self.cfg.fpr_points:
@@ -427,6 +449,7 @@ class ExperimentRunner:
                             "detector": det.name,
                             "detector_spec": spec,
                             "metrics": m,
+                            "metrics_unsup_labels": m_unsup,
                             "operating_points": op,
                             "latency_s": {
                                 "detector": float(dt_det),
