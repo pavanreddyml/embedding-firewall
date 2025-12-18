@@ -23,6 +23,7 @@ class SentenceTransformerCachedEmbedder(CachedEmbedder):
         batch_size: int = 64,
         normalize: bool = True,
     ) -> None:
+        os.environ.setdefault("USE_TF", "0")  # avoid TensorFlow on environments like Colab
         os.environ.setdefault("TRANSFORMERS_NO_TF", "1")
         os.environ.setdefault("TRANSFORMERS_NO_FLAX", "1")
 
