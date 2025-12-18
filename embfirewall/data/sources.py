@@ -86,6 +86,7 @@ class HFDatasetsSource(PromptSource):
     split: str = "train"
     subset: Optional[str] = None
     streaming: bool = True
+    token: Optional[Any] = None
     text_field: Optional[str] = None
     text_fields: Optional[Sequence[str]] = None
     filters: Optional[Dict[str, Any]] = None
@@ -118,6 +119,7 @@ class HFDatasetsSource(PromptSource):
             self.subset,
             split=self.split,
             streaming=bool(self.streaming),
+            token=self.token,
         )
 
         flt = self.filters or {}

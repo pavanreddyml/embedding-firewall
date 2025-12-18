@@ -37,21 +37,18 @@ labels:
         subset: default
         split: train
         streaming: true
-        text_field: adversarial
-        filters:
-          eq:
-            data_type: adversarial_benign
+        token: true
+        text_field: prompt
         max_rows: 15000
 
       - kind: hf
         name: bench_llm_orbench_hard
         dataset: bench-llm/or-bench
+        subset: or-bench-hard-1k
         split: train
         streaming: true
+        token: true
         text_field: prompt
-        filters:
-          eq:
-            split_type: hard
         max_rows: 10000
 
   malicious:
