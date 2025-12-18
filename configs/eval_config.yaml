@@ -123,6 +123,8 @@ embeddings:
 detectors:
   enable_unsupervised: true
   enable_supervised: true
+  # Optional: widen unsupervised-positive labels (e.g., include borderline for OOD scoring)
+  # unsupervised_positive_labels: [malicious, borderline]
 
   # Each entry is passed to build_detector(spec)
   unsupervised:
