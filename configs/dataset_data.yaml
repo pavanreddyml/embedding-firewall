@@ -19,27 +19,16 @@ labels:
         text_field: prompt
         max_rows: 10000
 
-      # High-quality instruction/QA prompts
+      # Prompt-injection dataset: explicit benign label (0)
       - kind: hf
-        name: openorca_question
-        dataset: Open-Orca/OpenOrca
-        split: train
-        streaming: true
-        text_field: question
-        max_rows: 10000
-
-      # Human-written prompter messages
-      - kind: hf
-        name: oasst1_prompter_en
-        dataset: OpenAssistant/oasst1
-        subset: default
+        name: prompt_injections_label0
+        dataset: JasperLS/prompt-injections
         split: train
         streaming: true
         text_field: text
         filters:
           eq:
-            role: prompter
-            lang: en
+            label: 0
         max_rows: 10000
 
   malicious:
@@ -54,41 +43,28 @@ labels:
         text_field: prompt
         max_rows: 10000
 
-      # WildJailbreak harmful prompts (vanilla + adversarial)
-      - kind: hf
-        name: wildjailbreak_vanilla_harmful
-        dataset: walledai/WildJailbreak
-        subset: default
-        split: train
-        streaming: true
-        text_field: vanilla
-        filters:
-          eq:
-            data_type: vanilla_harmful
-        max_rows: 10000
-
-      - kind: hf
-        name: wildjailbreak_adversarial_harmful
-        dataset: walledai/WildJailbreak
-        subset: default
-        split: train
-        streaming: true
-        text_field: adversarial
-        filters:
-          eq:
-            data_type: adversarial_harmful
-        max_rows: 10000
-
-      # Prompt-injection labeled data (explicitly malicious)
+      # Prompt-injection dataset: explicit malicious label (1)
       - kind: hf
         name: prompt_injections_label1
-        dataset: deepset/prompt-injections
+        dataset: JasperLS/prompt-injections
         split: train
         streaming: true
         text_field: text
         filters:
           eq:
             label: 1
+        max_rows: 10000
+
+      # XSTest unsafe prompts (prompt injection / jailbreak attempts)
+      - kind: hf
+        name: xstest_unsafe
+        dataset: walledai/XSTest
+        split: train
+        streaming: true
+        text_field: prompt
+        filters:
+          eq:
+            label: unsafe
         max_rows: 10000
 
   borderline:
@@ -102,36 +78,35 @@ labels:
         text_field: prompt
         max_rows: 10000
 
-      # WildJailbreak benign counterparts (looks close to harmful distribution)
+      # OR-Bench benign-but-refusal-triggering prompts
       - kind: hf
-        name: wildjailbreak_vanilla_benign
-        dataset: walledai/WildJailbreak
-        subset: default
+        name: or_bench_80k
+        dataset: bench-llm/or-bench
+        subset: or-bench-80k
         split: train
         streaming: true
-        text_field: vanilla
-        filters:
-          eq:
-            data_type: vanilla_benign
+        text_field: prompt
         max_rows: 10000
 
       - kind: hf
-        name: wildjailbreak_adversarial_benign
-        dataset: walledai/WildJailbreak
-        subset: default
+        name: or_bench_hard_1k
+        dataset: bench-llm/or-bench
+        subset: or-bench-hard-1k
         split: train
         streaming: true
-        text_field: adversarial
-        filters:
-          eq:
-            data_type: adversarial_benign
+        text_field: prompt
         max_rows: 10000
 
-      # Dual-use domain (optional diversity)
+      # XSTest safe prompts (benign but potentially suspicious)
       - kind: hf
-        name: cybersecurityqaa
-        dataset: Rowden/CybersecurityQAA
+        name: xstest_safe
+        dataset: walledai/XSTest
         split: train
         streaming: true
-        text_field: question
+        text_field: prompt
+        filters:
+          eq:
+            label: safe
         max_rows: 10000
+
+# Note: Sources may contain overlapping prompts; downstream deduplication is not currently enabled.
