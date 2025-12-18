@@ -11,10 +11,13 @@ but reports AUROC under two label definitions:
 
 Usage (defaults match run_eval.py paths):
 
-    python hypothesis.py \
-        --eval-config configs/eval_config.yaml \
-        --data-dir ./data \
-        --run-dir ./runs/hypothesis
+    python hypothesis.py
+
+You can override the paths with environment variables:
+
+- HYPOTHESIS_EVAL_CONFIG (default: configs/eval_config.yaml)
+- HYPOTHESIS_DATA_DIR (default: ./data)
+- HYPOTHESIS_RUN_DIR (default: ./runs/hypothesis)
 
 The script prints per-detector AUROC for both label definitions and basic score statistics
 for each label group. It does not write figures or JSON results.
@@ -22,9 +25,9 @@ for each label group. It does not write figures or JSON results.
 
 from __future__ import annotations
 
-import argparse
+import os
 from pathlib import Path
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 
@@ -257,14 +260,13 @@ def run_diagnostic(eval_config: str, data_dir: str, run_dir: str) -> None:
                 _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
 
 
-def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Diagnose unsupervised vs supervised AUROC gap")
-    p.add_argument("--eval-config", default=EVAL_CONFIG_PATH, help="Path to eval_config.yaml")
-    p.add_argument("--data-dir", default=DATA_DIR, help="Path to dataset directory (JSON shards)")
-    p.add_argument("--run-dir", default=str(Path("runs") / "hypothesis"), help="Working run directory")
-    return p.parse_args()
+def _env_or_default(env_key: str, default: str) -> str:
+    val = os.environ.get(env_key)
+    return val if val else default
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    run_diagnostic(eval_config=str(args.eval_config), data_dir=str(args.data_dir), run_dir=str(args.run_dir))
+    eval_config = _env_or_default("HYPOTHESIS_EVAL_CONFIG", EVAL_CONFIG_PATH)
+    data_dir = _env_or_default("HYPOTHESIS_DATA_DIR", DATA_DIR)
+    run_dir = _env_or_default("HYPOTHESIS_RUN_DIR", str(Path("runs") / "hypothesis"))
+    run_diagnostic(eval_config=str(eval_config), data_dir=str(data_dir), run_dir=str(run_dir))
