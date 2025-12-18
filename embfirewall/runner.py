@@ -14,7 +14,6 @@ from tqdm import tqdm
 from .detectors import DEFAULT_PATTERNS, KeywordBaseline
 from .detectors.factory import build_detector
 from .embeddings import EmbeddingSpec, build_embedder
-from .embeddings.cache import EmbeddingCache
 from .viz import write_all_figures
 
 
@@ -45,8 +44,6 @@ class DatasetSlices:
 @dataclass
 class RunConfig:
     run_dir: str
-
-    embedding_cache_dir: Optional[str] = None
 
     normal_label: str = "normal"
     borderline_label: str = "borderline"
@@ -139,12 +136,6 @@ class ExperimentRunner:
 
         self.run_dir = Path(cfg.run_dir)
         self.run_dir.mkdir(parents=True, exist_ok=True)
-
-        if cfg.embedding_cache_dir is not None:
-            self.embedding_cache_dir = Path(cfg.embedding_cache_dir)
-        else:
-            self.embedding_cache_dir = self.run_dir.parent / "embedding_cache"
-        self.embedding_cache_dir.mkdir(parents=True, exist_ok=True)
 
         self.val_y = np.array([_y_binary(x, cfg.malicious_label) for x in data.val_labels], dtype=np.int32)
         self.test_y = np.array([_y_binary(x, cfg.malicious_label) for x in data.test_labels], dtype=np.int32)
@@ -270,48 +261,11 @@ class ExperimentRunner:
             "borderline_block_ci95": [float(bl_ci[0]), float(bl_ci[1])],
         }
 
-    @staticmethod
-    def _materialize_embeddings(vecs: List[Optional[np.ndarray]]) -> np.ndarray:
-        if not vecs:
-            return np.empty((0, 0), dtype=np.float32)
-
-        dim: Optional[int] = None
-        for v in vecs:
-            if v is not None:
-                dim = int(v.size)
-                break
-
-        if dim is None:
-            return np.empty((len(vecs), 0), dtype=np.float32)
-
-        zero = np.zeros((dim,), dtype=np.float32)
-        out: List[np.ndarray] = []
-        for v in vecs:
-            if v is None:
-                out.append(zero.copy())
-            else:
-                arr = np.asarray(v, dtype=np.float32).reshape(-1)
-                out.append(arr)
-
-        return np.vstack([a.reshape(1, -1) for a in out])
-
     def _embed(self, emb_spec: EmbeddingSpec, texts: List[str]) -> Tuple[np.ndarray, float]:
         t0_total = time.time()
 
-        with EmbeddingCache(self.embedding_cache_dir, emb_spec.model_id) as cache:
-            cached_vecs, missing_idx, hashes = cache.lookup(texts)
-
-            dt_embed = 0.0
-            if missing_idx:
-                embedder = build_embedder(emb_spec)
-                missing_texts = [texts[i] for i in missing_idx]
-                missing_vecs, dt_embed = embedder.embed(missing_texts, desc=f"embed[{emb_spec.name}]")
-                cache.store(hashes=hashes, embeddings=missing_vecs, indices=missing_idx)
-
-                for arr_idx, text_idx in enumerate(missing_idx):
-                    cached_vecs[text_idx] = missing_vecs[arr_idx].reshape(-1)
-
-            X = self._materialize_embeddings(cached_vecs)
+        embedder = build_embedder(emb_spec)
+        X, dt_embed = embedder.embed(texts, desc=f"embed[{emb_spec.name}]")
 
         dt_total = time.time() - t0_total
         # Report the wall-clock time spent retrieving/embedding for transparency.
