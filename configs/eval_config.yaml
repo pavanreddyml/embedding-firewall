@@ -39,28 +39,28 @@ embeddings:
   - kind: st
     name: S1_hf_bge_m3
     model_id: BAAI/bge-m3                           # ~8k context, efficient and openly available
-    device: cpu
+    device: cuda
     batch_size: 16
     normalize: true
 
   - kind: st
     name: M1_hf_gte_qwen2_1_5B
     model_id: Alibaba-NLP/gte-Qwen2-1.5B-instruct   # ~32k context, good balance and public
-    device: cpu
+    device: cuda
     batch_size: 8
     normalize: true
 
   - kind: st
     name: G1_hf_nv_embed_v2
     model_id: nvidia/NV-Embed-v2                    # ~16k context, great quality
-    device: cpu
+    device: cuda
     batch_size: 6
     normalize: true
 
   - kind: st
     name: F1_hf_jina_v3
     model_id: jinaai/jina-embeddings-v3            # ~10k context, amazing capacity
-    device: cpu
+    device: cuda
     batch_size: 4
     normalize: true
 
