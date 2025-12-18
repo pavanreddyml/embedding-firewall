@@ -1,0 +1,200 @@
+# file: configs/eval_config.yaml
+# Defines BOTH: dataset caps + evaluation grid (embeddings x detectors)
+
+dataset:
+  seed: 7
+  max_train_normal: 2000   # set to null for no cap
+  max_val_total: 2000      # set to null for no cap
+  max_test_total: 2000     # set to null for no cap
+  max_chars: 10000
+  supervised_val_fit_frac: 0.5  # supervised baselines: fit on this fraction of val, calibrate thresholds on the rest
+
+labels:
+  normal_label: normal
+  borderline_label: borderline
+  malicious_label: malicious
+
+# FPR operating points calibrated on NORMAL validation rows (no test leakage)
+fpr_points: [0.05, 0.10]
+
+keyword_baseline:
+  enabled: true
+  # Optional override; if omitted, code uses DEFAULT_PATTERNS in embfirewall/detectors/keywords.py
+  # patterns:
+  #   - "ignore\\s+all\\s+previous"
+  #   - "forget\\s+all\\s+previous"
+  #   - "system\\s+prompt"
+  #   - "developer\\s+message"
+  #   - "jailbreak"
+  #   - "do\\s+anything\\s+now"
+  #   - "DAN\\b"
+  #   - "reveal\\s+the\\s+prompt"
+  #   - "bypass"
+  #   - "policy"
+  #   - "rules"
+  #   - "confidential"
+
+embeddings:
+  # Hugging Face sentence-transformer models (min 10k context windows) ordered from average to amazing.
+  - kind: st
+    name: S1_hf_bge_m3
+    model_id: BAAI/bge-m3                           # ~8k context, efficient and openly available
+    device: cuda
+    batch_size: 16
+    normalize: true
+
+  - kind: st
+    name: M1_hf_gte_qwen2_1_5B
+    model_id: Alibaba-NLP/gte-Qwen2-1.5B-instruct   # ~32k context, good balance and public
+    device: cuda
+    batch_size: 8
+    normalize: true
+
+  - kind: st
+    name: G1_hf_nv_embed_v2
+    model_id: mixedbread-ai/mxbai-embed-large-v1   # ~8k context, strong public alternative
+    device: cuda
+    batch_size: 6
+    normalize: true
+
+  - kind: st
+    name: F1_hf_jina_v3
+    model_id: jinaai/jina-embeddings-v3            # ~10k context, amazing capacity
+    device: cuda
+    batch_size: 4
+    normalize: true
+
+  # Ollama-only lineup (commented out for now) retained for quick switching.
+  # - kind: ollama
+  #   name: S1_ollama_bge_m3
+  #   model_id: bge-m3            # ~8k context, efficient small footprint
+  #   batch_size: 64
+  #   normalize: true
+  #
+  # - kind: ollama
+  #   name: M1_ollama_snowflake_arctic
+  #   model_id: snowflake-arctic-embed  # ~8k context, balanced performance
+  #   batch_size: 48
+  #   normalize: true
+  #
+  # - kind: ollama
+  #   name: G1_ollama_mxbai_large
+  #   model_id: mxbai-embed-large       # ~8k context, strong general quality
+  #   batch_size: 32
+  #   normalize: true
+  #
+  # - kind: ollama
+  #   name: F1_ollama_jina_v3
+  #   model_id: jina-embeddings-v3      # ~8k context, high-capacity (fantastic)
+  #   batch_size: 16
+  #   normalize: true
+
+  # Previous non-Ollama options kept for quick switching if needed.
+  # - kind: openai
+  #   name: S1_openai_3_small
+  #   model_id: text-embedding-3-small
+  #   batch_size: 128
+  #   normalize: true
+  #   dimensions: 1536
+  #   openai_api_key_env: OPENAI_API_KEY
+  #
+  # - kind: openai
+  #   name: M1_openai_3_large
+  #   model_id: text-embedding-3-large
+  #   batch_size: 64
+  #   normalize: true
+  #   dimensions: 3072
+  #   openai_api_key_env: OPENAI_API_KEY
+  #
+  # - kind: st
+  #   name: G1_bge_large
+  #   model_id: BAAI/bge-large-en-v1.5
+  #   device: cpu
+  #   batch_size: 16
+  #   normalize: true
+  #
+  # - kind: st
+  #   name: F1_e5_large_v2
+  #   model_id: intfloat/e5-large-v2
+  #   device: cpu
+  #   batch_size: 16
+  #   normalize: true
+
+detectors:
+  enable_unsupervised: true
+  enable_supervised: true
+  # Unsupervised metrics treat these labels as positive (primary Recipe 1 run)
+  unsupervised_positive_labels: [malicious, borderline]
+  # Optional: widen to [malicious, borderline] for over-refusal analysis
+
+  # Each entry is passed to build_detector(spec)
+  unsupervised:
+    - type: centroid
+
+    - type: knn
+      k: 5
+      name: knn5
+
+    - type: knn
+      k: 10
+      name: knn10
+
+    - type: ocsvm
+      nu: 0.05
+      gamma: scale
+      name: ocsvm
+
+    - type: iforest
+      contamination: 0.05
+      n_estimators: 200
+      random_state: 7
+      name: iforest
+
+    - type: mahalanobis
+      name: mahal
+
+    - type: lof
+      n_neighbors: 35
+      name: lof35
+
+    - type: pca
+      n_components: 64
+      name: pca64
+
+  supervised:
+    - type: logreg
+      C: 1.0
+      max_iter: 2000
+      name: logreg
+
+    - type: logreg
+      C: 0.3
+      max_iter: 4000
+      class_weight: balanced
+      name: logreg_balanced
+
+    - type: linsvm
+      C: 1.5
+      max_iter: 8000
+      class_weight: balanced
+      calibration_cv: 5
+      calibration_method: sigmoid
+      name: linsvm_calibrated
+
+    - type: hgbt
+      learning_rate: 0.06
+      max_depth: 10
+      max_iter: 450
+      l2_regularization: 0.1
+      name: hgbt
+
+    # Example: try multiple regularization strengths
+    # - type: logreg
+    #   C: 0.3
+    #   max_iter: 2000
+    #   name: logreg_C0.3
+    #
+    # - type: logreg
+    #   C: 3.0
+    #   max_iter: 2000
+    #   name: logreg_C3

@@ -48,6 +48,15 @@ grid and capture plots/metrics for the paper.
 
 For very large datasets, writing is streamed to avoid holding everything in memory.
 
+```
+# Experiment: Unsupervised-friendly dataset (Recipe – Injection Dominant)
+# Key properties:
+# - Normal: benign prompts (no attack-like patterns)
+# - Borderline: adversarial benign (attack-like syntax but safe)
+# - Malicious: adversarial harmful and prompt injections
+# Goal: Increase Euclidean / cosine separation between normal and malicious embeddings.
+```
+
 ## Configs
 
 See `configs/dataset_500k.yaml` and `configs/dataset_3x1m.yaml`.

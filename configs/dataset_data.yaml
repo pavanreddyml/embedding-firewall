@@ -9,104 +9,82 @@ text_filters:
 labels:
   normal:
     sources:
-      # In-the-wild benign user prompts (credible "real" distribution)
       - kind: hf
-        name: itw_regular_2023_12_25
+        name: safe_prompts_regular
         dataset: TrustAIRLab/in-the-wild-jailbreak-prompts
         subset: regular_2023_12_25
         split: train
         streaming: true
         text_field: prompt
-        max_rows: 10000
+        max_rows: 30000
 
-      # Prompt-injection dataset: explicit benign label (0)
       - kind: hf
-        name: prompt_injections_label0
-        dataset: JasperLS/prompt-injections
+        name: benign_openai_chat
+        dataset: lmsys/chatbot_arena_conversations
         split: train
         streaming: true
-        text_field: text
+        text_field: user_input
         filters:
           eq:
-            label: 0
+            role: user
+        max_rows: 20000
+
+  borderline:
+    sources:
+      - kind: hf
+        name: wildjailbreak_adversarial_benign
+        dataset: walledai/WildJailbreak
+        subset: default
+        split: train
+        streaming: true
+        text_field: adversarial
+        filters:
+          eq:
+            data_type: adversarial_benign
+        max_rows: 15000
+
+      - kind: hf
+        name: bench_llm_orbench_hard
+        dataset: bench-llm/or-bench
+        split: train
+        streaming: true
+        text_field: prompt
+        filters:
+          eq:
+            split_type: hard
         max_rows: 10000
 
   malicious:
     sources:
-      # In-the-wild jailbreak prompts (credible "real" attacks)
       - kind: hf
-        name: itw_jailbreak_2023_12_25
-        dataset: TrustAIRLab/in-the-wild-jailbreak-prompts
-        subset: jailbreak_2023_12_25
+        name: hackaprompt_injection
+        dataset: hackaprompt/hackaprompt-dataset
         split: train
         streaming: true
         text_field: prompt
-        max_rows: 10000
+        filters:
+          eq:
+            success: True
+        max_rows: 15000
 
-      # Prompt-injection dataset: explicit malicious label (1)
       - kind: hf
-        name: prompt_injections_label1
-        dataset: JasperLS/prompt-injections
+        name: wildjailbreak_adversarial_harmful
+        dataset: walledai/WildJailbreak
+        subset: default
+        split: train
+        streaming: true
+        text_field: adversarial
+        filters:
+          eq:
+            data_type: adversarial_harmful
+        max_rows: 30000
+
+      - kind: hf
+        name: lakera_mosscap_prompt_injection
+        dataset: Lakera/mosscap_prompt_injection
         split: train
         streaming: true
         text_field: text
-        filters:
-          eq:
-            label: 1
-        max_rows: 10000
-
-      # XSTest unsafe prompts (prompt injection / jailbreak attempts)
-      - kind: hf
-        name: xstest_unsafe
-        dataset: walledai/XSTest
-        split: test
-        streaming: true
-        text_field: prompt
-        filters:
-          eq:
-            label: unsafe
-        max_rows: 10000
-
-  borderline:
-    sources:
-      # Designed for over-refusal: sensitive-looking but benign
-      - kind: hf
-        name: falsereject_train
-        dataset: AmazonScience/FalseReject
-        split: train
-        streaming: true
-        text_field: prompt
-        max_rows: 10000
-
-      # OR-Bench benign-but-refusal-triggering prompts
-      - kind: hf
-        name: or_bench_80k
-        dataset: bench-llm/or-bench
-        subset: or-bench-80k
-        split: train
-        streaming: true
-        text_field: prompt
-        max_rows: 10000
-
-      - kind: hf
-        name: or_bench_hard_1k
-        dataset: bench-llm/or-bench
-        subset: or-bench-hard-1k
-        split: train
-        streaming: true
-        text_field: prompt
-        max_rows: 10000
-
-      # XSTest safe prompts (benign but potentially suspicious)
-      - kind: hf
-        name: xstest_safe
-        dataset: walledai/XSTest
-        split: test
-        streaming: true
-        text_field: prompt
-        filters:
-          eq:
-            label: safe
-        max_rows: 10000
+        max_rows: 30000
 
 # Note: Sources may contain overlapping prompts; downstream deduplication is not currently enabled.
