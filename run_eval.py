@@ -96,10 +96,17 @@ def _parse_embeddings(cfg: dict) -> list[EmbeddingSpec]:
     return out
 
 
-def _load_train_normal(data_dir: str, seed: int, cap: int | None, *, max_chars: int | None) -> list[str]:
+def _load_train_normal(
+    data_dir: str,
+    seed: int,
+    cap: int | None,
+    *,
+    max_chars: int | None,
+    normal_label: str,
+) -> list[str]:
     texts, _labels = interleave_label_files(
         data_dir,
-        labels=("normal",),
+        labels=(normal_label,),
         per_label_cap=cap,
         total_cap=cap,
         seed=seed,
@@ -110,10 +117,18 @@ def _load_train_normal(data_dir: str, seed: int, cap: int | None, *, max_chars: 
     return texts
 
 
-def _load_val(data_dir: str, seed: int, cap: int | None, *, max_chars: int | None) -> tuple[list[str], list[str]]:
+def _load_val(
+    data_dir: str,
+    seed: int,
+    cap: int | None,
+    *,
+    max_chars: int | None,
+    normal_label: str,
+    malicious_label: str,
+) -> tuple[list[str], list[str]]:
     return interleave_label_files(
         data_dir,
-        labels=("normal", "malicious"),
+        labels=(normal_label, malicious_label),
         per_label_cap=None,
         total_cap=cap,
         seed=seed,
@@ -123,10 +138,19 @@ def _load_val(data_dir: str, seed: int, cap: int | None, *, max_chars: int | Non
     )
 
 
-def _load_test(data_dir: str, seed: int, cap: int | None, *, max_chars: int | None) -> tuple[list[str], list[str]]:
+def _load_test(
+    data_dir: str,
+    seed: int,
+    cap: int | None,
+    *,
+    max_chars: int | None,
+    normal_label: str,
+    borderline_label: str,
+    malicious_label: str,
+) -> tuple[list[str], list[str]]:
     return interleave_label_files(
         data_dir,
-        labels=("normal", "borderline", "malicious"),
+        labels=(normal_label, borderline_label, malicious_label),
         per_label_cap=None,
         total_cap=cap,
         seed=seed,
@@ -185,19 +209,41 @@ def run_eval(
         f"max_train_normal={max_train_normal_i} max_val_total={max_val_total_i} max_test_total={max_test_total_i} max_chars={max_chars_i}"
     )
 
+    labels_cfg = eval_cfg.get("labels") or {}
+    normal_label = str(labels_cfg.get("normal_label", "normal"))
+    borderline_label = str(labels_cfg.get("borderline_label", "borderline"))
+    malicious_label = str(labels_cfg.get("malicious_label", "malicious"))
+
     print("\n[run] Loading train_texts (normal only)")
-    train_texts = _load_train_normal(str(data_dir_path), seed=seed, cap=max_train_normal_i, max_chars=max_chars_i)
+    train_texts = _load_train_normal(
+        str(data_dir_path),
+        seed=seed,
+        cap=max_train_normal_i,
+        max_chars=max_chars_i,
+        normal_label=normal_label,
+    )
     print(f"[run] train_texts loaded: {len(train_texts)}")
 
     print("\n[run] Loading val (normal + malicious)")
     val_texts, val_labels = _load_val(
-        str(data_dir_path), seed=seed + 1, cap=max_val_total_i, max_chars=max_chars_i
+        str(data_dir_path),
+        seed=seed + 1,
+        cap=max_val_total_i,
+        max_chars=max_chars_i,
+        normal_label=normal_label,
+        malicious_label=malicious_label,
     )
     print(f"[run] val loaded: n={len(val_texts)} counts={_counts(val_labels)}")
 
     print("\n[run] Loading test (normal + borderline + malicious)")
     test_texts, test_labels = _load_test(
-        str(data_dir_path), seed=seed + 2, cap=max_test_total_i, max_chars=max_chars_i
+        str(data_dir_path),
+        seed=seed + 2,
+        cap=max_test_total_i,
+        max_chars=max_chars_i,
+        normal_label=normal_label,
+        borderline_label=borderline_label,
+        malicious_label=malicious_label,
     )
     print(f"[run] test loaded: n={len(test_texts)} counts={_counts(test_labels)}")
 
@@ -229,11 +275,6 @@ def run_eval(
 
     if not embeddings:
         raise SystemExit("[run] No embeddings selected to run")
-
-    labels_cfg = eval_cfg.get("labels") or {}
-    normal_label = str(labels_cfg.get("normal_label", "normal"))
-    borderline_label = str(labels_cfg.get("borderline_label", "borderline"))
-    malicious_label = str(labels_cfg.get("malicious_label", "malicious"))
 
     fpr_points = eval_cfg.get("fpr_points", [0.05, 0.10])
     if not isinstance(fpr_points, list) or not fpr_points:
