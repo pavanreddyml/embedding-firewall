@@ -18,9 +18,9 @@ from .embeddings.cache import EmbeddingCache
 from .viz import write_all_figures
 
 
-def _y_binary(label: str) -> int:
-    # We treat only "malicious" as positive by default
-    return 1 if label == "malicious" else 0
+def _y_binary(label: str, malicious_label: str) -> int:
+    # We treat only the configured malicious label as positive
+    return 1 if label == malicious_label else 0
 
 
 @dataclass
@@ -135,8 +135,8 @@ class ExperimentRunner:
             self.embedding_cache_dir = self.run_dir.parent / "embedding_cache"
         self.embedding_cache_dir.mkdir(parents=True, exist_ok=True)
 
-        self.val_y = np.array([_y_binary(x) for x in data.val_labels], dtype=np.int32)
-        self.test_y = np.array([_y_binary(x) for x in data.test_labels], dtype=np.int32)
+        self.val_y = np.array([_y_binary(x, cfg.malicious_label) for x in data.val_labels], dtype=np.int32)
+        self.test_y = np.array([_y_binary(x, cfg.malicious_label) for x in data.test_labels], dtype=np.int32)
 
         self.val_is_normal = np.array([x == cfg.normal_label for x in data.val_labels], dtype=bool)
         self.test_is_normal = np.array([x == cfg.normal_label for x in data.test_labels], dtype=bool)
