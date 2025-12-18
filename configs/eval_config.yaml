@@ -123,8 +123,9 @@ embeddings:
 detectors:
   enable_unsupervised: true
   enable_supervised: true
-  # Optional: widen unsupervised-positive labels (e.g., include borderline for OOD scoring)
-  # unsupervised_positive_labels: [malicious, borderline]
+  # Unsupervised metrics treat these labels as positive (primary Recipe 1 run)
+  unsupervised_positive_labels: [malicious]
+  # Optional: widen to [malicious, borderline] for over-refusal analysis
 
   # Each entry is passed to build_detector(spec)
   unsupervised:
