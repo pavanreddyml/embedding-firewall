@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+import shutil
 from pathlib import Path
 
 import yaml
@@ -24,6 +25,15 @@ def _in_colab() -> bool:
 # GLOBAL PATHS (edit this file)
 # -----------------------------
 IN_COLAB = _in_colab()
+
+# Unique identifier for this experiment run. Set the same RUN_ID across
+# multiple notebooks to merge results later.
+RUN_ID = "demo_run"
+
+# Optional: limit which embedding model_ids to run. Leave empty to run all
+# embeddings from configs/eval_config.yaml.
+# Available model_ids are printed at runtime.
+RUN_MODEL_IDS: list[str] = []
 
 LOCAL_BASE_DIR = "."
 COLAB_BASE_DIR = "/content/drive/MyDrive/research/embfirewall"  # <-- change to your folder on Drive
@@ -147,6 +157,11 @@ def run_eval(
 
     eval_cfg = _load_eval_config(str(eval_config_path))
 
+    if not RUN_ID:
+        run_id = time.strftime("%Y%m%d_%H%M%S")
+    else:
+        run_id = RUN_ID
+
     # dataset settings from eval_config.yaml
     ds_cfg = eval_cfg.get("dataset") or {}
     seed = int(ds_cfg.get("seed", 7))
@@ -183,14 +198,26 @@ def run_eval(
         test_labels=test_labels,
     )
 
-    if runs_dir:
-        run_dir = Path(runs_dir_path) / time.strftime("%Y%m%d_%H%M%S")
-    else:
-        run_dir = Path(time.strftime("%Y%m%d_%H%M%S"))
+    run_dir = Path(runs_dir_path) / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n[run] run_dir={run_dir}")
 
-    embeddings = _parse_embeddings(eval_cfg)
+    embeddings_all = _parse_embeddings(eval_cfg)
+    available_model_ids = [e.model_id for e in embeddings_all]
+    print(f"[run] available model_ids: {available_model_ids}")
+
+    if RUN_MODEL_IDS:
+        targets = set(RUN_MODEL_IDS)
+        embeddings = [e for e in embeddings_all if e.model_id in targets]
+        missing = sorted(targets - {e.model_id for e in embeddings})
+        if missing:
+            raise SystemExit(f"[run] Unknown model_ids requested via RUN_MODEL_IDS: {missing}")
+        print(f"[run] filtered embeddings via RUN_MODEL_IDS -> {len(embeddings)} models")
+    else:
+        embeddings = embeddings_all
+
+    if not embeddings:
+        raise SystemExit("[run] No embeddings selected to run")
 
     labels_cfg = eval_cfg.get("labels") or {}
     normal_label = str(labels_cfg.get("normal_label", "normal"))
@@ -212,25 +239,33 @@ def run_eval(
     unsup_list = det_cfg.get("unsupervised")
     sup_list = det_cfg.get("supervised")
 
-    cfg = RunConfig(
-        run_dir=str(run_dir),
-        normal_label=normal_label,
-        borderline_label=borderline_label,
-        malicious_label=malicious_label,
-        fpr_points=fpr_points_t,  # type: ignore
-        embedding_models=embeddings,
-        enable_keyword=enable_keyword,
-        enable_unsupervised=enable_unsup,
-        enable_supervised=enable_sup,
-        unsupervised_detectors=(list(unsup_list) if isinstance(unsup_list, list) else None),
-        supervised_detectors=(list(sup_list) if isinstance(sup_list, list) else None),
-        keyword_patterns=(list(keyword_patterns) if isinstance(keyword_patterns, list) else None),
-    )
+    for emb_spec in embeddings:
+        model_dir_name = emb_spec.model_id.replace("/", "_")
+        model_run_dir = run_dir / model_dir_name
 
-    runner = ExperimentRunner(cfg, data)
-    runner.run()
+        if model_run_dir.exists():
+            print(f"[run] Existing results for model_id={emb_spec.model_id} at {model_run_dir}, deleting for rerun")
+            shutil.rmtree(model_run_dir)
 
-    print(f"\n[run] Saved results: {run_dir / 'results.json'}")
+        cfg = RunConfig(
+            run_dir=str(model_run_dir),
+            normal_label=normal_label,
+            borderline_label=borderline_label,
+            malicious_label=malicious_label,
+            fpr_points=fpr_points_t,  # type: ignore
+            embedding_models=[emb_spec],
+            enable_keyword=enable_keyword,
+            enable_unsupervised=enable_unsup,
+            enable_supervised=enable_sup,
+            unsupervised_detectors=(list(unsup_list) if isinstance(unsup_list, list) else None),
+            supervised_detectors=(list(sup_list) if isinstance(sup_list, list) else None),
+            keyword_patterns=(list(keyword_patterns) if isinstance(keyword_patterns, list) else None),
+        )
+
+        runner = ExperimentRunner(cfg, data)
+        runner.run()
+
+        print(f"[run] Saved results for {emb_spec.model_id}: {model_run_dir / 'results.json'}")
 
 
 if __name__ == "__main__":
