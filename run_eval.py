@@ -43,7 +43,6 @@ STORAGE_DIR = COLAB_BASE_DIR if IN_COLAB else LOCAL_BASE_DIR
 
 DATA_DIR = str(Path(STORAGE_DIR) / "data")
 RUNS_DIR = str(Path(STORAGE_DIR) / "runs")
-EMBED_CACHE_DIR = str(Path(STORAGE_DIR) / "embedding_cache")
 EVAL_CONFIG_PATH = str(Path(WORKING_DIR) / "configs" / "eval_config.yaml")
 # -----------------------------
 
@@ -310,7 +309,6 @@ def run_eval(
             malicious_label=malicious_label,
             fpr_points=fpr_points_t,  # type: ignore
             embedding_models=[emb_spec],
-            embedding_cache_dir=EMBED_CACHE_DIR,
             enable_keyword=enable_keyword,
             enable_unsupervised=enable_unsup,
             enable_supervised=enable_sup,

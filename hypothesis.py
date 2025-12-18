@@ -171,7 +171,6 @@ def _build_runner(eval_cfg_path: str, data_dir: str, run_dir: str) -> Tuple[Expe
         malicious_label=meta["malicious_label"],
         fpr_points=fpr_points_t,  # type: ignore[arg-type]
         embedding_models=embeddings,
-        embedding_cache_dir=str(Path(run_dir).parent / "embedding_cache"),
         enable_keyword=enable_keyword,
         enable_unsupervised=enable_unsup,
         enable_supervised=enable_sup,
