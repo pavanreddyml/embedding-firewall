@@ -90,11 +90,23 @@ def _list_label_files(data_dir: Path, label: str) -> List[Path]:
     return []
 
 
-def _row_text(obj: Dict[str, Any]) -> Optional[str]:
+def _row_text(obj: Dict[str, Any], *, max_chars: Optional[int] = None) -> Optional[str]:
     t = obj.get("text")
-    if isinstance(t, str) and t.strip():
-        return t
-    return None
+    if not isinstance(t, str):
+        return None
+
+    text = t.strip()
+    if not text:
+        return None
+
+    lower = text.lower()
+    if lower in {"nan", "none", "null"}:
+        return None
+
+    if max_chars is not None and len(text) > int(max_chars):
+        return None
+
+    return text
 
 
 def load_label_texts(
@@ -102,6 +114,7 @@ def load_label_texts(
     label: str,
     *,
     limit: Optional[int] = None,
+    max_chars: Optional[int] = None,
     show_progress: bool = True,
 ) -> List[str]:
     """
@@ -121,7 +134,7 @@ def load_label_texts(
 
         rows = _read_json_array(fp, show_progress=show_progress, desc=f"load[{label}:{fp.name}]")
         for r in rows:
-            t = _row_text(r)
+            t = _row_text(r, max_chars=max_chars)
             if t is None:
                 continue
             out.append(t)
@@ -138,6 +151,7 @@ def interleave_labels(
     total_cap: Optional[int],
     seed: int,
     per_label_cap: Optional[int] = None,
+    max_chars: Optional[int] = None,
     show_progress: bool = True,
     desc: str = "mix",
 ) -> Tuple[List[str], List[str]]:
@@ -156,6 +170,7 @@ def interleave_labels(
             data_dir,
             lab,
             limit=per_label_cap,
+            max_chars=max_chars,
             show_progress=show_progress,
         )
         rng.shuffle(texts)
@@ -203,6 +218,7 @@ def interleave_label_files(
     per_label_cap: Optional[int],
     total_cap: Optional[int],
     seed: int,
+    max_chars: Optional[int] = None,
     show_progress: bool = True,
     desc: str = "mix",
 ) -> Tuple[List[str], List[str]]:
@@ -212,6 +228,7 @@ def interleave_label_files(
         total_cap=total_cap,
         seed=seed,
         per_label_cap=per_label_cap,
+        max_chars=max_chars,
         show_progress=show_progress,
         desc=desc,
     )
