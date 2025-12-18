@@ -59,7 +59,7 @@ labels:
       - kind: hf
         name: xstest_unsafe
         dataset: walledai/XSTest
-        split: train
+        split: test
         streaming: true
         text_field: prompt
         filters:
@@ -101,7 +101,7 @@ labels:
       - kind: hf
         name: xstest_safe
         dataset: walledai/XSTest
-        split: train
+        split: test
         streaming: true
         text_field: prompt
         filters:
