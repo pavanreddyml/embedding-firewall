@@ -81,12 +81,27 @@ def _list_label_files(data_dir: Path, label: str) -> List[Path]:
     Prefer shards: <label>-00000.json, <label>-00001.json, ...
     Else single: <label>.json
     """
+    # First, look directly under the provided data directory.
     shards = sorted(p for p in data_dir.glob(f"{label}-*.json") if p.is_file())
     if shards:
         return shards
+
     single = data_dir / f"{label}.json"
     if single.exists():
         return [single]
+
+    # Fallback: allow datasets where each label lives in its own subfolder
+    # (e.g., <dataset>/<label>/<label>-00000.json> created by run_download_data.py).
+    nested_dir = data_dir / label
+    if nested_dir.is_dir():
+        shards = sorted(p for p in nested_dir.glob(f"{label}-*.json") if p.is_file())
+        if shards:
+            return shards
+
+        single = nested_dir / f"{label}.json"
+        if single.exists():
+            return [single]
+
     return []
 
 
