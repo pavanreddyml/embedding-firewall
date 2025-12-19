@@ -124,8 +124,9 @@ detectors:
   enable_unsupervised: true
   enable_supervised: true
   # Unsupervised metrics treat these labels as positive (primary Recipe 1 run)
-  unsupervised_positive_labels: [malicious]
-  # Optional: widen to [malicious, borderline] for over-refusal analysis
+  # Borderline data in all provided datasets is adversarial/unsafe-ish, so we
+  # include it as positive by default.
+  unsupervised_positive_labels: [malicious, borderline]
 
   # Each entry is passed to build_detector(spec)
   unsupervised:
