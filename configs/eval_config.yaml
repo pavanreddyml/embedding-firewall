@@ -3,9 +3,9 @@
 
 dataset:
   seed: 7
-  max_train_normal: 2000   # set to null for no cap
-  max_val_total: 2000      # set to null for no cap
-  max_test_total: 2000     # set to null for no cap
+  max_train_normal: 20000   # set to null for no cap
+  max_val_total: 20000      # set to null for no cap
+  max_test_total: 20000     # set to null for no cap
   max_chars: 10000
   supervised_val_fit_frac: 0.5  # supervised baselines: fit on this fraction of val, calibrate thresholds on the rest
 
