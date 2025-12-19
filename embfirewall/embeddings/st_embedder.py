@@ -31,19 +31,25 @@ class SentenceTransformerEmbedder(Embedder):
         from sentence_transformers import SentenceTransformer  # type: ignore
         self.device = str(device)
         self.trust_remote_code = bool(trust_remote_code)
+        model_kwargs = {"use_cache": False}
         self.model = SentenceTransformer(
             model_id,
             device=self.device,
             trust_remote_code=self.trust_remote_code,
+            model_kwargs=model_kwargs,
         )
 
-        # Some transformer backends (e.g., certain Qwen variants) expose caching
-        # paths that break SentenceTransformers. Flip them off after loading to
-        # avoid forwarding cache objects entirely.
-        auto_model = getattr(self.model, "auto_model", None)
-        model_config = getattr(auto_model, "config", None)
-        if model_config and hasattr(model_config, "use_cache"):
-            model_config.use_cache = False
+        try:
+            transformer = self.model._first_module()
+            if hasattr(transformer, "auto_model") and hasattr(
+                transformer.auto_model, "config"
+            ):
+                transformer.auto_model.config.use_cache = False
+            elif hasattr(transformer, "model") and hasattr(transformer.model, "config"):
+                transformer.model.config.use_cache = False
+        except Exception:
+            # If we cannot toggle caching explicitly, proceed without failing init.
+            pass
 
         extra: Dict = {"device": self.device, "trust_remote_code": self.trust_remote_code}
         super().__init__(
