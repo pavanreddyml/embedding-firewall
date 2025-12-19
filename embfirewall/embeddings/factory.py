@@ -1,16 +1,16 @@
 # file: embfirewall/embeddings/factory.py
 from __future__ import annotations
 
-from .openai_embedder import OpenAICachedEmbedder
+from .openai_embedder import OpenAIEmbedder
 from .spec import EmbeddingSpec
-from .st_embedder import SentenceTransformerCachedEmbedder
-from .azure_openai_embedder import AzureOpenAICachedEmbedder
-from .ollama_embedder import OllamaCachedEmbedder
+from .st_embedder import SentenceTransformerEmbedder
+from .azure_openai_embedder import AzureOpenAIEmbedder
+from .ollama_embedder import OllamaEmbedder
 
 
 def build_embedder(spec: EmbeddingSpec):
     if spec.kind == "st":
-        return SentenceTransformerCachedEmbedder(
+        return SentenceTransformerEmbedder(
             name=spec.name,
             model_id=spec.model_id,
             device=spec.device,
@@ -20,7 +20,7 @@ def build_embedder(spec: EmbeddingSpec):
         )
 
     if spec.kind == "openai":
-        return OpenAICachedEmbedder(
+        return OpenAIEmbedder(
             name=spec.name,
             model_id=spec.model_id,
             batch_size=spec.batch_size,
@@ -33,7 +33,7 @@ def build_embedder(spec: EmbeddingSpec):
         )
 
     if spec.kind == "azure_openai":
-        return AzureOpenAICachedEmbedder(
+        return AzureOpenAIEmbedder(
             name=spec.name,
             model_id=spec.model_id,
             batch_size=spec.batch_size,
@@ -47,7 +47,7 @@ def build_embedder(spec: EmbeddingSpec):
         )
 
     if spec.kind == "ollama":
-        return OllamaCachedEmbedder(
+        return OllamaEmbedder(
             name=spec.name,
             model_id=spec.model_id,
             batch_size=spec.batch_size,

@@ -8,7 +8,7 @@ from typing import Callable, Dict, Optional, Sequence
 
 import numpy as np
 
-from .base import CachedEmbedder
+from .base import Embedder
 
 
 def _build_token_counter(model_id: str) -> Callable[[str], int]:
@@ -80,7 +80,7 @@ class _FixedWindowTokenLimiter:
                 time.sleep(0)
 
 
-class OpenAICachedEmbedder(CachedEmbedder):
+class OpenAIEmbedder(Embedder):
     @classmethod
     def type_name(cls) -> str:
         return "openai"

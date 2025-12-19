@@ -7,10 +7,10 @@ from typing import Dict, Sequence
 import numpy as np
 import requests
 
-from .base import CachedEmbedder
+from .base import Embedder
 
 
-class OllamaCachedEmbedder(CachedEmbedder):
+class OllamaEmbedder(Embedder):
     """Calls a running Ollama instance for embeddings.
 
     Expects the Ollama HTTP API to be reachable (default: http://localhost:11434).

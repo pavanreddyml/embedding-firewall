@@ -6,10 +6,10 @@ from typing import Dict, Sequence
 
 import numpy as np
 
-from .base import CachedEmbedder
+from .base import Embedder
 
 
-class SentenceTransformerCachedEmbedder(CachedEmbedder):
+class SentenceTransformerEmbedder(Embedder):
     @classmethod
     def type_name(cls) -> str:
         return "st"
@@ -29,7 +29,6 @@ class SentenceTransformerCachedEmbedder(CachedEmbedder):
         os.environ.setdefault("TRANSFORMERS_NO_FLAX", "1")
 
         from sentence_transformers import SentenceTransformer  # type: ignore
-
         self.device = str(device)
         self.trust_remote_code = bool(trust_remote_code)
         self.model = SentenceTransformer(

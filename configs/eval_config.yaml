@@ -3,9 +3,9 @@
 
 dataset:
   seed: 7
-  max_train_normal: 2000   # set to null for no cap
-  max_val_total: 2000      # set to null for no cap
-  max_test_total: 2000     # set to null for no cap
+  max_train_normal: 20000   # set to null for no cap
+  max_val_total: 20000      # set to null for no cap
+  max_test_total: 20000     # set to null for no cap
   max_chars: 10000
   supervised_val_fit_frac: 0.5  # supervised baselines: fit on this fraction of val, calibrate thresholds on the rest
 
@@ -124,8 +124,9 @@ detectors:
   enable_unsupervised: true
   enable_supervised: true
   # Unsupervised metrics treat these labels as positive (primary Recipe 1 run)
-  unsupervised_positive_labels: [malicious]
-  # Optional: widen to [malicious, borderline] for over-refusal analysis
+  # Borderline data in all provided datasets is adversarial/unsafe-ish, so we
+  # include it as positive by default.
+  unsupervised_positive_labels: [malicious, borderline]
 
   # Each entry is passed to build_detector(spec)
   unsupervised:

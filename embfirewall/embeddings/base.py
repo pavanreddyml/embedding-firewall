@@ -16,9 +16,9 @@ def _l2_normalize(x: np.ndarray, eps: float = 1e-12) -> np.ndarray:
     return x / norms
 
 
-class CachedEmbedder(ABC):
+class Embedder(ABC):
     """
-    Base class for embedders without on-disk caching.
+    Base class for embedders without caching.
     Handles batching, normalization, and fallback logic.
     """
 
