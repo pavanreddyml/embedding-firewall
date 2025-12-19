@@ -38,7 +38,7 @@ labels:
         filters:
           eq:
             data_type: adversarial_benign
-        max_rows: 80000
+        max_rows: 50000
 
   malicious:
     sources:
@@ -53,4 +53,4 @@ labels:
         filters:
           eq:
             data_type: adversarial_harmful
-        max_rows: 90000
+        max_rows: 50000

@@ -59,10 +59,16 @@ def _result_files(run_dir: Path) -> List[Path]:
     return out
 
 
+def _dataset_dirs(run_dir: Path) -> List[Path]:
+    if not run_dir.exists():
+        return []
+    return [p for p in sorted(run_dir.iterdir()) if p.is_dir() and p.name != "consolidate"]
+
+
 def _path_config(run_id: str, storage_dir: str) -> dict[str, Path]:
     runs_dir = Path(storage_dir) / "runs"
     run_dir = runs_dir / run_id
-    consolidate_dir = run_dir / "consolidate"
+    consolidate_dir = run_dir / "consolidate_all"
     consolidated_results_path = consolidate_dir / "results.json"
     figures_dir = consolidate_dir / "figures"
 
@@ -87,48 +93,96 @@ def consolidate_runs(run_id: str = RUN_ID, *, storage_dir: str = STORAGE_DIR) ->
     print(f"[consolidate] RUN_DIR={run_dir}")
     print(f"[consolidate] OUTPUT={consolidated_results_path}")
 
-    res_files = _result_files(run_dir)
-    if not res_files:
-        raise SystemExit(f"[consolidate] No results.json files found under {run_dir}")
-
-    combined: Dict[str, Any] | None = None
-    datasets: List[Any] = []
-    source_dirs: List[str] = []
-
-    for res_path in res_files:
-        data = _load_results(res_path)
-        source_dirs.append(str(res_path.parent))
-
-        datasets.append(data.get("dataset"))
-
-        if combined is None:
-            combined = {
-                "meta": dict(data.get("meta") or {}),
-                "dataset": data.get("dataset"),
-                "embeddings": dict(data.get("embeddings") or {}),
-                "runs": list(data.get("runs") or []),
-            }
-        else:
-            combined.setdefault("embeddings", {}).update(data.get("embeddings") or {})
-            combined.setdefault("runs", []).extend(data.get("runs") or [])
-
-    assert combined is not None
-    meta = combined.setdefault("meta", {})
-    meta["run_id"] = run_id
-    meta["consolidated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
-    meta["source_run_dirs"] = source_dirs
-
-    if datasets:
-        unique_datasets = {json.dumps(ds, sort_keys=True) for ds in datasets if ds is not None}
-        if len(unique_datasets) > 1:
-            print("[consolidate][warn] Multiple dataset configs detected across runs; using the first one.")
+    dataset_dirs = _dataset_dirs(run_dir)
+    if not dataset_dirs:
+        raise SystemExit(f"[consolidate] No dataset directories found under {run_dir}")
 
     consolidate_dir.mkdir(parents=True, exist_ok=True)
+
+    all_runs: List[Dict[str, Any]] = []
+    all_embeddings: Dict[str, Any] = {}
+    dataset_results: Dict[str, Any] = {}
+
+    for ds_dir in dataset_dirs:
+        dataset_name = ds_dir.name
+        res_files = _result_files(ds_dir)
+        if not res_files:
+            print(f"[consolidate][warn] No results.json files found under {ds_dir}, skipping")
+            continue
+
+        combined: Dict[str, Any] | None = None
+        datasets_meta: List[Any] = []
+        source_dirs: List[str] = []
+
+        for res_path in res_files:
+            data = _load_results(res_path)
+            source_dirs.append(str(res_path.parent))
+            datasets_meta.append(data.get("dataset"))
+
+            if combined is None:
+                combined = {
+                    "meta": dict(data.get("meta") or {}),
+                    "dataset": data.get("dataset"),
+                    "embeddings": dict(data.get("embeddings") or {}),
+                    "runs": list(data.get("runs") or []),
+                }
+            else:
+                combined.setdefault("embeddings", {}).update(data.get("embeddings") or {})
+                combined.setdefault("runs", []).extend(data.get("runs") or [])
+
+        if combined is None:
+            continue
+
+        meta = combined.setdefault("meta", {})
+        meta["run_id"] = run_id
+        meta["dataset_name"] = dataset_name
+        meta["consolidated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        meta["source_run_dirs"] = source_dirs
+
+        if datasets_meta:
+            unique_datasets = {json.dumps(ds, sort_keys=True) for ds in datasets_meta if ds is not None}
+            if len(unique_datasets) > 1:
+                print(
+                    f"[consolidate][warn] Multiple dataset configs detected across runs for {dataset_name}; using the first one."
+                )
+
+        dataset_results[dataset_name] = combined
+        all_runs.extend([{**r, "dataset_name": dataset_name} for r in combined.get("runs") or []])
+        all_embeddings.update(combined.get("embeddings") or {})
+
+        ds_consolidate_dir = ds_dir / "consolidate"
+        ds_consolidate_dir.mkdir(parents=True, exist_ok=True)
+        ds_results_path = ds_consolidate_dir / "results.json"
+        ds_figures_dir = ds_consolidate_dir / "figures"
+
+        with open(ds_results_path, "w", encoding="utf-8") as f:
+            json.dump(combined, f, ensure_ascii=False, indent=2)
+        print(f"[consolidate] Wrote {dataset_name} results -> {ds_results_path}")
+
+        write_all_figures(str(ds_results_path), str(ds_figures_dir))
+        print(f"[consolidate] Wrote {dataset_name} figures -> {ds_figures_dir}")
+
+    if not dataset_results:
+        raise SystemExit(f"[consolidate] No datasets consolidated under {run_dir}")
+
+    all_meta = {
+        "run_id": run_id,
+        "consolidated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "datasets": sorted(dataset_results.keys()),
+    }
+
+    combined_all = {
+        "meta": all_meta,
+        "datasets": dataset_results,
+        "runs": all_runs,
+        "embeddings": all_embeddings,
+    }
+
     with open(consolidated_results_path, "w", encoding="utf-8") as f:
-        json.dump(combined, f, ensure_ascii=False, indent=2)
-    print(f"[consolidate] Wrote combined results -> {consolidated_results_path}")
+        json.dump(combined_all, f, ensure_ascii=False, indent=2)
+    print(f"[consolidate] Wrote cross-dataset summary -> {consolidated_results_path}")
 
     write_all_figures(str(consolidated_results_path), str(figures_dir))
-    print(f"[consolidate] Wrote figures -> {figures_dir}")
+    print(f"[consolidate] Wrote cross-dataset figures -> {figures_dir}")
 if __name__ == "__main__":
     consolidate_runs()
