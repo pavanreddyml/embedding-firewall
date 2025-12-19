@@ -1,0 +1,58 @@
+seed: 7
+
+text_filters:
+  min_chars: 10
+  max_chars: 10000
+  normalize_ws: true
+
+labels:
+  # WildGuardMix fields: prompt (str), adversarial (bool), prompt_harm_label (harmful|unharmful|None)
+  # Dataset is gated; requires HF token acceptance. See dataset card. :contentReference[oaicite:3]{index=3}
+
+  normal:
+    sources:
+      - kind: hf
+        name: wildguardmix_normal_unharmful_vanilla
+        dataset: allenai/wildguardmix
+        subset: wildguardtrain
+        split: train
+        streaming: true
+        token: true
+        text_field: prompt
+        filters:
+          eq:
+            adversarial: false
+            prompt_harm_label: unharmful
+        max_rows: 50000
+
+  borderline:
+    sources:
+      - kind: hf
+        name: wildguardmix_borderline_unharmful_adversarial
+        dataset: allenai/wildguardmix
+        subset: wildguardtrain
+        split: train
+        streaming: true
+        token: true
+        text_field: prompt
+        filters:
+          eq:
+            adversarial: true
+            prompt_harm_label: unharmful
+        max_rows: 50000
+
+  malicious:
+    sources:
+      - kind: hf
+        name: wildguardmix_malicious_harmful_adversarial
+        dataset: allenai/wildguardmix
+        subset: wildguardtrain
+        split: train
+        streaming: true
+        token: true
+        text_field: prompt
+        filters:
+          eq:
+            adversarial: true
+            prompt_harm_label: harmful
+        max_rows: 50000
