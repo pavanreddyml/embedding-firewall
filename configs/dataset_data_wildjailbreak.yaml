@@ -1,0 +1,56 @@
+seed: 7
+
+text_filters:
+  min_chars: 10
+  max_chars: 10000
+  normalize_ws: true
+
+labels:
+  # WildJailbreak: 262K prompt-response pairs; gated.
+  # Columns include: vanilla (str), adversarial (str), data_type in
+  # [vanilla_harmful, vanilla_benign, adversarial_harmful, adversarial_benign]. :contentReference[oaicite:5]{index=5}
+
+  normal:
+    sources:
+      - kind: hf
+        name: wildjailbreak_normal_vanilla_benign
+        dataset: allenai/wildjailbreak
+        subset: train
+        split: train
+        streaming: true
+        token: true
+        text_field: vanilla
+        filters:
+          eq:
+            data_type: vanilla_benign
+        max_rows: 50000
+
+  borderline:
+    sources:
+      - kind: hf
+        name: wildjailbreak_borderline_adversarial_benign
+        dataset: allenai/wildjailbreak
+        subset: train
+        split: train
+        streaming: true
+        token: true
+        text_field: adversarial
+        filters:
+          eq:
+            data_type: adversarial_benign
+        max_rows: 80000
+
+  malicious:
+    sources:
+      - kind: hf
+        name: wildjailbreak_malicious_adversarial_harmful
+        dataset: allenai/wildjailbreak
+        subset: train
+        split: train
+        streaming: true
+        token: true
+        text_field: adversarial
+        filters:
+          eq:
+            data_type: adversarial_harmful
+        max_rows: 90000

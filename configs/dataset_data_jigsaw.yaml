@@ -1,0 +1,127 @@
+seed: 7
+
+text_filters:
+  min_chars: 10
+  max_chars: 10000
+  normalize_ws: true
+
+labels:
+  # Dataset viewer shows 466k rows, with fields:
+  # comment_text + {toxic, severe_toxic, obscene, threat, insult, identity_hate} as 0/1. :contentReference[oaicite:7]{index=7}
+  #
+  # We construct:
+  # - normal: completely clean
+  # - borderline: mild toxicity only (toxic=1 but no severe/threat/identity_hate)
+  # - malicious: severe_toxic or threat or identity_hate (mutually exclusive sources to reduce duplicates)
+
+  normal:
+    sources:
+      - kind: hf
+        name: jigsaw_normal_all_zero_train
+        dataset: thesofakillers/jigsaw-toxic-comment-classification-challenge
+        subset: default
+        split: train
+        streaming: true
+        text_field: comment_text
+        filters:
+          eq:
+            toxic: 0
+            severe_toxic: 0
+            obscene: 0
+            threat: 0
+            insult: 0
+            identity_hate: 0
+        max_rows: 100000
+
+      - kind: hf
+        name: jigsaw_normal_all_zero_test
+        dataset: thesofakillers/jigsaw-toxic-comment-classification-challenge
+        subset: default
+        split: test
+        streaming: true
+        text_field: comment_text
+        filters:
+          eq:
+            toxic: 0
+            severe_toxic: 0
+            obscene: 0
+            threat: 0
+            insult: 0
+            identity_hate: 0
+        max_rows: 100000
+
+  borderline:
+    sources:
+      - kind: hf
+        name: jigsaw_borderline_mild_toxic_train
+        dataset: thesofakillers/jigsaw-toxic-comment-classification-challenge
+        subset: default
+        split: train
+        streaming: true
+        text_field: comment_text
+        filters:
+          eq:
+            toxic: 1
+            severe_toxic: 0
+            threat: 0
+            identity_hate: 0
+        max_rows: 60000
+
+      - kind: hf
+        name: jigsaw_borderline_mild_toxic_test
+        dataset: thesofakillers/jigsaw-toxic-comment-classification-challenge
+        subset: default
+        split: test
+        streaming: true
+        text_field: comment_text
+        filters:
+          eq:
+            toxic: 1
+            severe_toxic: 0
+            threat: 0
+            identity_hate: 0
+        max_rows: 60000
+
+  malicious:
+    sources:
+      # Source A: severe toxicity
+      - kind: hf
+        name: jigsaw_malicious_severe_toxic
+        dataset: thesofakillers/jigsaw-toxic-comment-classification-challenge
+        subset: default
+        split: train
+        streaming: true
+        text_field: comment_text
+        filters:
+          eq:
+            severe_toxic: 1
+        max_rows: 60000
+
+      # Source B: threats but NOT severe_toxic (reduces overlap)
+      - kind: hf
+        name: jigsaw_malicious_threat_only
+        dataset: thesofakillers/jigsaw-toxic-comment-classification-challenge
+        subset: default
+        split: train
+        streaming: true
+        text_field: comment_text
+        filters:
+          eq:
+            threat: 1
+            severe_toxic: 0
+        max_rows: 30000
+
+      # Source C: identity_hate but NOT severe_toxic or threat (reduces overlap)
+      - kind: hf
+        name: jigsaw_malicious_identity_hate_only
+        dataset: thesofakillers/jigsaw-toxic-comment-classification-challenge
+        subset: default
+        split: train
+        streaming: true
+        text_field: comment_text
+        filters:
+          eq:
+            identity_hate: 1
+            severe_toxic: 0
+            threat: 0
+        max_rows: 30000
