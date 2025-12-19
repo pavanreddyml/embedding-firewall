@@ -44,8 +44,8 @@ embeddings:
     normalize: true
 
   - kind: st
-    name: M1_hf_gte_qwen2_1_5B
-    model_id: Alibaba-NLP/gte-Qwen2-1.5B-instruct   # ~32k context, good balance and public
+    name: M1_hf_gte_large_en_v15
+    model_id: Alibaba-NLP/gte-large-en-v1.5          # ~8k context, strong and stable
     device: cuda
     batch_size: 8
     normalize: true
