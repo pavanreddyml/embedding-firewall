@@ -37,6 +37,14 @@ class SentenceTransformerEmbedder(Embedder):
             trust_remote_code=self.trust_remote_code,
         )
 
+        # Some transformer backends (e.g., certain Qwen variants) expose caching
+        # paths that break SentenceTransformers. Flip them off after loading to
+        # avoid forwarding cache objects entirely.
+        auto_model = getattr(self.model, "auto_model", None)
+        model_config = getattr(auto_model, "config", None)
+        if model_config and hasattr(model_config, "use_cache"):
+            model_config.use_cache = False
+
         extra: Dict = {"device": self.device, "trust_remote_code": self.trust_remote_code}
         super().__init__(
             name=name,
