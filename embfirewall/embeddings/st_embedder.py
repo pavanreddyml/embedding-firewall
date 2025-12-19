@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 import os
-from typing import Dict, Optional, Sequence
+from typing import Dict, Sequence
 
 import numpy as np
 
-from .base import CachedEmbedder
+from .base import Embedder
 
 
-class SentenceTransformerCachedEmbedder(CachedEmbedder):
+class SentenceTransformerEmbedder(Embedder):
     @classmethod
     def type_name(cls) -> str:
         return "st"
@@ -29,29 +29,6 @@ class SentenceTransformerCachedEmbedder(CachedEmbedder):
         os.environ.setdefault("TRANSFORMERS_NO_FLAX", "1")
 
         from sentence_transformers import SentenceTransformer  # type: ignore
-        try:
-            from transformers.cache_utils import DynamicCache  # type: ignore
-
-            if not hasattr(DynamicCache, "get_usable_length"):
-                # Some transformer versions used by sentence-transformers do not ship
-                # the `get_usable_length` API required by recent model checkpoints.
-                # Reintroduce the method to preserve compatibility with those builds.
-                def _get_usable_length(
-                    self: "DynamicCache", new_seq_length: int, layer_idx: Optional[int] = 0
-                ) -> int:
-                    max_length = self.get_max_length()
-                    previous_seq_length = self.get_seq_length(layer_idx)
-                    if max_length is not None and previous_seq_length + new_seq_length > max_length:
-                        return max_length - new_seq_length
-                    return previous_seq_length
-
-                DynamicCache.get_usable_length = _get_usable_length  # type: ignore[attr-defined]
-        except Exception:
-            # transformers is an optional dependency for the sentence-transformers
-            # backend; if it's unavailable we defer to the library to raise a
-            # clearer error during model construction.
-            pass
-
         self.device = str(device)
         self.trust_remote_code = bool(trust_remote_code)
         self.model = SentenceTransformer(

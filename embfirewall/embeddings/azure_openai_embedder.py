@@ -8,7 +8,7 @@ from typing import Callable, Dict, Optional, Sequence
 
 import numpy as np
 
-from .base import CachedEmbedder
+from .base import Embedder
 
 
 def _build_token_counter(_model_hint: str) -> Callable[[str], int]:
@@ -67,7 +67,7 @@ class _FixedWindowTokenLimiter:
                 time.sleep(0)
 
 
-class AzureOpenAICachedEmbedder(CachedEmbedder):
+class AzureOpenAIEmbedder(Embedder):
     @classmethod
     def type_name(cls) -> str:
         return "azure_openai"
