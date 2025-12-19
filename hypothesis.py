@@ -36,6 +36,7 @@ from embfirewall.runner import DatasetSlices, ExperimentRunner, RunConfig
 from run_eval import (
     DATA_DIR,
     EVAL_CONFIG_PATH,
+    _list_dataset_dirs,
     _load_eval_config,
     _load_test,
     _load_train_normal,
@@ -76,9 +77,7 @@ def _print_header(title: str) -> None:
     print("=" * 80)
 
 
-def _load_dataset(eval_cfg_path: str, data_dir: str) -> Tuple[DatasetSlices, Dict[str, str | int]]:
-    eval_cfg = _load_eval_config(eval_cfg_path)
-
+def _load_dataset(eval_cfg: dict, data_dir: str, dataset_name: str) -> Tuple[DatasetSlices, Dict[str, str | int]]:
     ds_cfg = eval_cfg.get("dataset") or {}
     seed = int(ds_cfg.get("seed", 7))
     max_train_normal = ds_cfg.get("max_train_normal", 20000)
@@ -140,14 +139,14 @@ def _load_dataset(eval_cfg_path: str, data_dir: str) -> Tuple[DatasetSlices, Dic
         "max_val_total": max_val_total,
         "max_test_total": max_test_total,
         "max_chars": max_chars,
+        "dataset_name": dataset_name,
     }
 
     return data, meta
 
 
-def _build_runner(eval_cfg_path: str, data_dir: str, run_dir: str) -> Tuple[ExperimentRunner, Dict]:
-    eval_cfg = _load_eval_config(eval_cfg_path)
-    data, meta = _load_dataset(eval_cfg_path, data_dir)
+def _build_runner(eval_cfg: dict, data_dir: str, run_dir: str, dataset_name: str) -> Tuple[ExperimentRunner, Dict]:
+    data, meta = _load_dataset(eval_cfg, data_dir, dataset_name)
 
     fpr_points = eval_cfg.get("fpr_points", [0.05, 0.10])
     fpr_points_t = tuple(float(x) for x in fpr_points)
@@ -177,6 +176,8 @@ def _build_runner(eval_cfg_path: str, data_dir: str, run_dir: str) -> Tuple[Expe
         unsupervised_detectors=(list(unsup_list) if isinstance(unsup_list, list) else None),
         supervised_detectors=(list(sup_list) if isinstance(sup_list, list) else None),
         keyword_patterns=(list(keyword_patterns) if isinstance(keyword_patterns, list) else None),
+        dataset_name=dataset_name,
+        unsupervised_positive_labels=(meta["malicious_label"], meta["borderline_label"]),
     )
 
     runner = ExperimentRunner(cfg, data)
@@ -214,49 +215,62 @@ def _summarize_detector(
 
 
 def run_diagnostic(eval_config: str, data_dir: str, run_dir: str) -> None:
-    runner, eval_cfg = _build_runner(eval_config, data_dir, run_dir)
+    eval_cfg = _load_eval_config(eval_config)
 
-    _print_header("Dataset")
-    print(
-        f"train={len(runner.data.train_texts)} val={len(runner.data.val_texts)} test={len(runner.data.test_texts)}"
-    )
-    print(
-        "val counts:",
-        {
-            "normal": int(np.sum(runner.val_is_normal)),
-            "malicious": int(np.sum(runner.val_y)),
-        },
-    )
-    print(
-        "test counts:",
-        {
-            "normal": int(np.sum(runner.test_is_normal)),
-            "borderline": int(np.sum(runner.test_is_borderline)),
-            "malicious": int(np.sum(runner.test_is_malicious)),
-        },
-    )
+    labels_cfg = eval_cfg.get("labels") or {}
+    normal_label = str(labels_cfg.get("normal_label", "normal"))
+    borderline_label = str(labels_cfg.get("borderline_label", "borderline"))
+    malicious_label = str(labels_cfg.get("malicious_label", "malicious"))
+    labels_tuple = (normal_label, borderline_label, malicious_label)
 
-    for emb_spec in runner.cfg.embedding_models:
-        _print_header(f"Embedding: {emb_spec.name} ({emb_spec.model_id})")
-        X_train, _ = runner._embed(emb_spec, runner.data.train_texts)
-        X_val, _ = runner._embed(emb_spec, runner.data.val_texts)
-        X_test, _ = runner._embed(emb_spec, runner.data.test_texts)
+    dataset_dirs = _list_dataset_dirs(Path(data_dir), labels_tuple)
+    if not dataset_dirs:
+        raise SystemExit(f"[hypothesis] No dataset folders found under {data_dir}")
 
-        if runner.cfg.enable_unsupervised and runner.cfg.unsupervised_detectors:
-            print("\n[unsupervised]")
-            for spec in runner.cfg.unsupervised_detectors:
-                det = build_detector(spec)
-                det.fit(X_train)
-                scores_test = det.score(X_test)
-                _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
+    for dataset_name, dataset_dir in dataset_dirs:
+        runner, _ = _build_runner(eval_cfg, str(dataset_dir), str(Path(run_dir) / dataset_name), dataset_name)
 
-        if runner.cfg.enable_supervised and runner.cfg.supervised_detectors:
-            print("\n[supervised]")
-            for spec in runner.cfg.supervised_detectors:
-                det = build_detector(spec)
-                det.fit(X_val[runner.sup_fit_idx], runner.val_y[runner.sup_fit_idx])
-                scores_test = det.score(X_test)
-                _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
+        _print_header(f"Dataset: {dataset_name}")
+        print(
+            f"train={len(runner.data.train_texts)} val={len(runner.data.val_texts)} test={len(runner.data.test_texts)}"
+        )
+        print(
+            "val counts:",
+            {
+                "normal": int(np.sum(runner.val_is_normal)),
+                "malicious": int(np.sum(runner.val_y)),
+            },
+        )
+        print(
+            "test counts:",
+            {
+                "normal": int(np.sum(runner.test_is_normal)),
+                "borderline": int(np.sum(runner.test_is_borderline)),
+                "malicious": int(np.sum(runner.test_is_malicious)),
+            },
+        )
+
+        for emb_spec in runner.cfg.embedding_models:
+            _print_header(f"Embedding: {emb_spec.name} ({emb_spec.model_id}) [{dataset_name}]")
+            X_train, _ = runner._embed(emb_spec, runner.data.train_texts)
+            X_val, _ = runner._embed(emb_spec, runner.data.val_texts)
+            X_test, _ = runner._embed(emb_spec, runner.data.test_texts)
+
+            if runner.cfg.enable_unsupervised and runner.cfg.unsupervised_detectors:
+                print("\n[unsupervised]")
+                for spec in runner.cfg.unsupervised_detectors:
+                    det = build_detector(spec)
+                    det.fit(X_train)
+                    scores_test = det.score(X_test)
+                    _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
+
+            if runner.cfg.enable_supervised and runner.cfg.supervised_detectors:
+                print("\n[supervised]")
+                for spec in runner.cfg.supervised_detectors:
+                    det = build_detector(spec)
+                    det.fit(X_val[runner.sup_fit_idx], runner.val_y[runner.sup_fit_idx])
+                    scores_test = det.score(X_test)
+                    _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
 
 
 def _env_or_default(env_key: str, default: str) -> str:

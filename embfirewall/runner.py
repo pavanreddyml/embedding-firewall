@@ -44,6 +44,7 @@ class DatasetSlices:
 @dataclass
 class RunConfig:
     run_dir: str
+    dataset_name: Optional[str] = None
 
     normal_label: str = "normal"
     borderline_label: str = "borderline"
@@ -67,7 +68,7 @@ class RunConfig:
     keyword_patterns: Optional[List[str]] = None
 
     # Metrics for unsupervised/keyword runs can optionally widen the positive set beyond malicious.
-    # Defaults to (malicious_label,) to preserve prior behavior.
+    # Defaults to (malicious_label, borderline_label) to surface adversarial-like borderline rows.
     unsupervised_positive_labels: Optional[Tuple[str, ...]] = None
 
     def __post_init__(self) -> None:
@@ -109,7 +110,7 @@ class RunConfig:
             ]
 
         if self.unsupervised_positive_labels is None:
-            self.unsupervised_positive_labels = (self.malicious_label,)
+            self.unsupervised_positive_labels = (self.malicious_label, self.borderline_label)
 
 
 def ensure_parent_dir(path: Path) -> Path:
@@ -277,8 +278,10 @@ class ExperimentRunner:
                 "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
                 "threshold_calibration_set": self.cfg.threshold_calibration_set,
                 "supervised_val_fit_frac": float(self.cfg.supervised_val_fit_frac),
+                "dataset_name": self.cfg.dataset_name,
             },
             "dataset": {
+                "name": self.cfg.dataset_name,
                 "train_n": len(self.data.train_texts),
                 "val_n": len(self.data.val_texts),
                 "test_n": len(self.data.test_texts),
