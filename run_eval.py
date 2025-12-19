@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from embfirewall.data.loaders import interleave_label_files
+from embfirewall.data.loaders import _list_label_files, interleave_label_files
 from embfirewall.embeddings import EmbeddingSpec
 from embfirewall.runner import DatasetSlices, ExperimentRunner, RunConfig
 
@@ -103,7 +103,9 @@ def _list_dataset_dirs(data_root: Path, labels: tuple[str, str, str]) -> list[tu
     for p in sorted(data_root.iterdir()):
         if not p.is_dir():
             continue
-        if all(list(p.glob(f"{lab}-*.json")) or (p / f"{lab}.json").exists() for lab in labels):
+        # Accept either flat label shards (<label>-00000.json) or per-label subfolders
+        # (<label>/<label>-00000.json) as produced by run_download_data.py.
+        if all(_list_label_files(p, lab) for lab in labels):
             out.append((p.name, p))
     return out
 
