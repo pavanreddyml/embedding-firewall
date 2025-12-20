@@ -35,6 +35,9 @@ RUN_ID = "demo_run"
 # Available model_ids are printed at runtime.
 RUN_MODEL_IDS: list[str] = []
 
+CHEAP_EMBED_KINDS = {"st", "ollama"}
+CHEAP_RANDOM_SEARCH_TRIALS = 12
+
 LOCAL_BASE_DIR = "."
 COLAB_BASE_DIR = "/content/drive/MyDrive/research/embfirewall"  # <-- change to your folder on Drive
 
@@ -328,6 +331,12 @@ def run_eval(
                 )
                 shutil.rmtree(model_run_dir)
 
+            random_search_trials = CHEAP_RANDOM_SEARCH_TRIALS if emb_spec.kind in CHEAP_EMBED_KINDS else 0
+            if random_search_trials > 0:
+                print(
+                    f"[run] enabling random search trials={random_search_trials} for cheap embedding kind={emb_spec.kind}"
+                )
+
             cfg = RunConfig(
                 run_dir=str(model_run_dir),
                 normal_label=normal_label,
@@ -343,6 +352,7 @@ def run_eval(
                 unsupervised_positive_labels=unsup_pos_labels_t,
                 keyword_patterns=(list(keyword_patterns) if isinstance(keyword_patterns, list) else None),
                 dataset_name=dataset_name,
+                random_search_trials=random_search_trials,
             )
 
             runner = ExperimentRunner(cfg, data)
