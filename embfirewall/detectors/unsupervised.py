@@ -7,6 +7,7 @@ import numpy as np
 from sklearn.covariance import LedoitWolf
 from sklearn.decomposition import PCA
 from sklearn.ensemble import IsolationForest
+from sklearn.mixture import GaussianMixture
 from sklearn.neighbors import LocalOutlierFactor, NearestNeighbors
 from sklearn.svm import OneClassSVM
 import torch
@@ -205,6 +206,49 @@ class PCAReconstructionError(Detector):
         X_hat = self.pca_.inverse_transform(Z)
         err = X - X_hat
         return np.sum(err * err, axis=1).reshape(-1)
+
+
+class GaussianMixtureEnergy(Detector):
+    def __init__(
+        self,
+        n_components: int = 3,
+        covariance_type: str = "full",
+        reg_covar: float = 1e-4,
+        max_iter: int = 300,
+        init_params: str = "kmeans",
+        random_state: Optional[int] = 0,
+        name: str = "gmm_energy",
+    ) -> None:
+        super().__init__(name=name)
+        self.n_components = int(n_components)
+        self.covariance_type = covariance_type
+        self.reg_covar = float(reg_covar)
+        self.max_iter = int(max_iter)
+        self.init_params = init_params
+        self.random_state = random_state
+        self.model_: Optional[GaussianMixture] = None
+
+    def fit(self, X_train: np.ndarray, y_train: Optional[np.ndarray] = None) -> "GaussianMixtureEnergy":
+        if not isinstance(X_train, np.ndarray) or X_train.ndim != 2 or X_train.shape[0] == 0:
+            raise ValueError(
+                f"GaussianMixtureEnergy.fit expects 2D non-empty array, got {getattr(X_train, 'shape', None)}"
+            )
+        self.model_ = GaussianMixture(
+            n_components=self.n_components,
+            covariance_type=self.covariance_type,
+            reg_covar=self.reg_covar,
+            max_iter=self.max_iter,
+            init_params=self.init_params,
+            random_state=self.random_state,
+        )
+        self.model_.fit(X_train)
+        return self
+
+    def score(self, X: np.ndarray) -> np.ndarray:
+        if self.model_ is None:
+            raise RuntimeError("GaussianMixtureEnergy not fitted")
+        # GaussianMixture.score_samples returns per-sample log-likelihood; negate for energy-style anomaly score
+        return -self.model_.score_samples(X).reshape(-1)
 
 
 def _activation(name: str) -> nn.Module:

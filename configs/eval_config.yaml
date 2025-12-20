@@ -162,6 +162,65 @@ detectors:
       n_components: 64
       name: pca64
 
+    - type: gmm
+      n_components: 12
+      covariance_type: full
+      reg_covar: 1.0e-3
+      max_iter: 400
+      random_state: 7
+      name: gmm_energy
+
+    - type: ensemble
+      name: ens_distance_mean
+      aggregation: mean
+      members:
+        - type: centroid
+        - type: mahalanobis
+        - type: knn
+          k: 10
+          name: knn10
+
+    - type: ensemble
+      name: ens_density_max
+      aggregation: max
+      members:
+        - type: gmm
+          n_components: 12
+          covariance_type: full
+          reg_covar: 1.0e-3
+          max_iter: 400
+          random_state: 7
+          name: gmm_energy
+        - type: iforest
+          contamination: 0.05
+          n_estimators: 200
+          random_state: 7
+          name: iforest
+        - type: lof
+          n_neighbors: 35
+          name: lof35
+
+    - type: ensemble
+      name: ens_recon_median
+      aggregation: median
+      members:
+        - type: pca
+          n_components: 64
+          name: pca64
+        - type: autoencoder
+          hidden_dims: [512, 256]
+          latent_dim: 128
+          epochs: 30
+          batch_size: 256
+          name: autoencoder
+        - type: vae
+          hidden_dims: [512, 256]
+          latent_dim: 128
+          epochs: 40
+          beta: 1.0
+          batch_size: 256
+          name: vae
+
     - type: autoencoder
       hidden_dims: [512, 256]
       latent_dim: 128
