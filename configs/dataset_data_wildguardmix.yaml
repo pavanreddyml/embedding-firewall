@@ -23,7 +23,7 @@ labels:
           eq:
             adversarial: false
             prompt_harm_label: unharmful
-        max_rows: 50000
+        max_rows: 200000
 
   borderline:
     sources:
