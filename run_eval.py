@@ -352,6 +352,7 @@ def run_eval(
                 enable_keyword=enable_keyword,
                 enable_unsupervised=enable_unsup,
                 enable_supervised=enable_sup,
+                enable_random_search=enable_random_search,
                 unsupervised_detectors=(list(unsup_list) if isinstance(unsup_list, list) else None),
                 supervised_detectors=(list(sup_list) if isinstance(sup_list, list) else None),
                 unsupervised_positive_labels=unsup_pos_labels_t,
