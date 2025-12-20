@@ -31,7 +31,7 @@ labels:
             threat: 0
             insult: 0
             identity_hate: 0
-        max_rows: 50000
+        max_rows: 200000
 
       - kind: hf
         name: jigsaw_normal_all_zero_test
@@ -48,7 +48,7 @@ labels:
             threat: 0
             insult: 0
             identity_hate: 0
-        max_rows: 50000
+        max_rows: 200000
 
   borderline:
     sources:
