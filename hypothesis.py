@@ -490,8 +490,9 @@ def run_diagnostic(eval_config: str, data_dir: str, run_dir: str, *, enable_rep_
                         )
                         if tried > 1:
                             metric_disp = f"{best_metric:.4f}" if best_metric is not None else "n/a"
+                            tuned_name = tuned_spec.get("name") or tuned_spec.get("type", "<unnamed>")
                             print(
-                                f"[hypothesis] tuned unsup {tuned_spec['name']} trials={tried} metric={metric_disp}"
+                                f"[hypothesis] tuned unsup {tuned_name} trials={tried} metric={metric_disp}"
                             )
                         det = build_detector(tuned_spec)
                         det.fit(X_train)
@@ -510,8 +511,9 @@ def run_diagnostic(eval_config: str, data_dir: str, run_dir: str, *, enable_rep_
                         )
                         if tried > 1:
                             metric_disp = f"{best_metric:.4f}" if best_metric is not None else "n/a"
+                            tuned_name = tuned_spec.get("name") or tuned_spec.get("type", "<unnamed>")
                             print(
-                                f"[hypothesis] tuned sup {tuned_spec['name']} trials={tried} metric={metric_disp}"
+                                f"[hypothesis] tuned sup {tuned_name} trials={tried} metric={metric_disp}"
                             )
                         det = build_detector(tuned_spec)
                         det.fit(X_val[runner.sup_fit_idx], runner.val_y[runner.sup_fit_idx])
