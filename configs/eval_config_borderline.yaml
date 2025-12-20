@@ -161,6 +161,29 @@ detectors:
       n_components: 64
       name: pca64
 
+    - type: autoencoder
+      hidden_dims: [512, 256]
+      latent_dim: 128
+      epochs: 30
+      batch_size: 256
+      name: autoencoder
+
+    - type: vae
+      hidden_dims: [512, 256]
+      latent_dim: 128
+      epochs: 40
+      beta: 1.0
+      batch_size: 256
+      name: vae
+
+    - type: gan
+      hidden_dims: [512, 256]
+      noise_dim: 128
+      epochs: 40
+      batch_size: 256
+      feature_match_weight: 5.0
+      name: gan
+
   supervised:
     - type: logreg
       C: 1.0

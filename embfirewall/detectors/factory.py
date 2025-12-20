@@ -6,13 +6,16 @@ from typing import Any, Dict, Union
 from .base import Detector
 from .supervised import GradientBoostingDetector, LinearSVMDetector, LogisticRegressionDetector
 from .unsupervised import (
+    AutoencoderDetector,
     CentroidDistance,
+    GANDiscriminatorDetector,
     IsolationForestDetector,
     KNNDistance,
     LocalOutlierFactorDetector,
     MahalanobisDistance,
     OneClassSVMDetector,
     PCAReconstructionError,
+    VariationalAutoencoderDetector,
 )
 
 DetectorSpec = Union[str, Dict[str, Any]]
@@ -65,6 +68,15 @@ def build_detector(spec: DetectorSpec) -> Detector:
 
     if t in ("pca", "pca_recon", "pca_reconstruction"):
         return PCAReconstructionError(**cfg)
+
+    if t in ("ae", "autoencoder"):
+        return AutoencoderDetector(**cfg)
+
+    if t in ("vae", "variational_autoencoder"):
+        return VariationalAutoencoderDetector(**cfg)
+
+    if t in ("gan", "gan_detector", "gan_disc", "gan_discriminator"):
+        return GANDiscriminatorDetector(**cfg)
 
     if t in ("logreg", "logisticregression", "logistic_regression"):
         return LogisticRegressionDetector(**cfg)
