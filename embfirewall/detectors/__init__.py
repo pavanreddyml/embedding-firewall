@@ -4,13 +4,16 @@ from .factory import build_detector
 from .keywords import DEFAULT_PATTERNS, KeywordBaseline
 from .supervised import GradientBoostingDetector, LinearSVMDetector, LogisticRegressionDetector
 from .unsupervised import (
+    AutoencoderDetector,
     CentroidDistance,
+    GANDiscriminatorDetector,
     IsolationForestDetector,
     KNNDistance,
     LocalOutlierFactorDetector,
     MahalanobisDistance,
     OneClassSVMDetector,
     PCAReconstructionError,
+    VariationalAutoencoderDetector,
 )
 
 __all__ = [
@@ -28,4 +31,7 @@ __all__ = [
     "MahalanobisDistance",
     "LocalOutlierFactorDetector",
     "PCAReconstructionError",
+    "AutoencoderDetector",
+    "VariationalAutoencoderDetector",
+    "GANDiscriminatorDetector",
 ]
