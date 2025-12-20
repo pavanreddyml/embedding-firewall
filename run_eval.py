@@ -270,6 +270,7 @@ def run_eval(
     det_cfg = eval_cfg.get("detectors") or {}
     enable_unsup = bool(det_cfg.get("enable_unsupervised", True))
     enable_sup = bool(det_cfg.get("enable_supervised", True))
+    enable_random_search = bool(det_cfg.get("enable_random_search", True))
     unsup_list = det_cfg.get("unsupervised")
     sup_list = det_cfg.get("supervised")
     unsup_pos_labels_t = (malicious_label, borderline_label)
@@ -331,7 +332,11 @@ def run_eval(
                 )
                 shutil.rmtree(model_run_dir)
 
-            random_search_trials = CHEAP_RANDOM_SEARCH_TRIALS if emb_spec.kind in CHEAP_EMBED_KINDS else 0
+            random_search_trials = (
+                CHEAP_RANDOM_SEARCH_TRIALS
+                if enable_random_search and emb_spec.kind in CHEAP_EMBED_KINDS
+                else 0
+            )
             if random_search_trials > 0:
                 print(
                     f"[run] enabling random search trials={random_search_trials} for cheap embedding kind={emb_spec.kind}"
@@ -347,6 +352,7 @@ def run_eval(
                 enable_keyword=enable_keyword,
                 enable_unsupervised=enable_unsup,
                 enable_supervised=enable_sup,
+                enable_random_search=enable_random_search,
                 unsupervised_detectors=(list(unsup_list) if isinstance(unsup_list, list) else None),
                 supervised_detectors=(list(sup_list) if isinstance(sup_list, list) else None),
                 unsupervised_positive_labels=unsup_pos_labels_t,

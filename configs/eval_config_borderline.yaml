@@ -123,6 +123,7 @@ embeddings:
 detectors:
   enable_unsupervised: true
   enable_supervised: true
+  enable_random_search: true
   # Unsupervised metrics treat these labels as positive (primary Recipe 1 run)
   unsupervised_positive_labels: [malicious, borderline]
   # Optional: widen to [malicious, borderline] for over-refusal analysis

@@ -64,6 +64,7 @@ class RunConfig:
     enable_unsupervised: bool = True
     enable_supervised: bool = True
     enable_keyword: bool = True
+    enable_random_search: bool = True
 
     # Hyperparameter search (only applied to cheap/local embeddings)
     random_search_trials: int = 0
@@ -346,6 +347,9 @@ class ExperimentRunner:
 
     def _random_search_trials_for_spec(self, spec: Dict[str, Any]) -> int:
         """Cap random search trials for slower detectors."""
+
+        if not self.cfg.enable_random_search:
+            return 0
 
         base_trials = max(0, int(self.cfg.random_search_trials))
         if base_trials == 0:

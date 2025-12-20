@@ -207,12 +207,15 @@ def _build_runner(eval_cfg: dict, data_dir: str, run_dir: str, dataset_name: str
     det_cfg = eval_cfg.get("detectors") or {}
     enable_unsup = bool(det_cfg.get("enable_unsupervised", True))
     enable_sup = bool(det_cfg.get("enable_supervised", True))
+    enable_random_search = bool(det_cfg.get("enable_random_search", True))
     unsup_list = det_cfg.get("unsupervised")
     sup_list = det_cfg.get("supervised")
 
     embeddings = _parse_embeddings(eval_cfg)
-    enable_random_search = any(e.kind in CHEAP_EMBED_KINDS for e in embeddings)
-    random_search_trials = CHEAP_RANDOM_SEARCH_TRIALS if enable_random_search else 0
+    enable_random_search_for_embeds = enable_random_search and any(
+        e.kind in CHEAP_EMBED_KINDS for e in embeddings
+    )
+    random_search_trials = CHEAP_RANDOM_SEARCH_TRIALS if enable_random_search_for_embeds else 0
     if random_search_trials > 0:
         print(
             "[hypothesis] enabling random search for cheap embedding kinds:",
@@ -229,6 +232,7 @@ def _build_runner(eval_cfg: dict, data_dir: str, run_dir: str, dataset_name: str
         enable_keyword=enable_keyword,
         enable_unsupervised=enable_unsup,
         enable_supervised=enable_sup,
+        enable_random_search=enable_random_search,
         unsupervised_detectors=(list(unsup_list) if isinstance(unsup_list, list) else None),
         supervised_detectors=(list(sup_list) if isinstance(sup_list, list) else None),
         keyword_patterns=(list(keyword_patterns) if isinstance(keyword_patterns, list) else None),
@@ -458,7 +462,9 @@ def _evaluate_with_sweep(runner: ExperimentRunner, cache: EmbeddingCache) -> Non
         preproc_modes = _normalize(X_train=X_train_raw, X_val=X_val_raw, X_test=X_test_raw)
         cheap_embed = emb_spec.kind in CHEAP_EMBED_KINDS
         orig_trials = runner.cfg.random_search_trials
-        runner.cfg.random_search_trials = CHEAP_RANDOM_SEARCH_TRIALS if cheap_embed else 0
+        runner.cfg.random_search_trials = (
+            CHEAP_RANDOM_SEARCH_TRIALS if runner.cfg.enable_random_search and cheap_embed else 0
+        )
 
         for prep_name, (X_train, X_val, X_test) in preproc_modes.items():
             print(f"\n--- Preprocessing: {prep_name} ---")
