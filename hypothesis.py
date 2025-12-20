@@ -399,6 +399,9 @@ def _evaluate_with_sweep(runner: ExperimentRunner) -> None:
         X_test_raw, _ = runner._embed(emb_spec, runner.data.test_texts)
 
         preproc_modes = _normalize(X_train=X_train_raw, X_val=X_val_raw, X_test=X_test_raw)
+        cheap_embed = emb_spec.kind in CHEAP_EMBED_KINDS
+        orig_trials = runner.cfg.random_search_trials
+        runner.cfg.random_search_trials = CHEAP_RANDOM_SEARCH_TRIALS if cheap_embed else 0
 
         for prep_name, (X_train, X_val, X_test) in preproc_modes.items():
             print(f"\n--- Preprocessing: {prep_name} ---")
@@ -416,8 +419,17 @@ def _evaluate_with_sweep(runner: ExperimentRunner) -> None:
                         display_metric = metric_tag
                         if det_type in {"centroid", "knn", "lof"}:
                             cfg["metric"] = metric_value
-                        disp_name = f"{cfg['name']}[{prep_name}|{display_metric}]"
-                        det = build_detector(cfg)
+                        tuned_cfg, best_metric, tried = runner._maybe_random_search_unsup(
+                            cfg, X_train, X_val
+                        )
+                        if tried > 1:
+                            metric_disp = f"{best_metric:.4f}" if best_metric is not None else "n/a"
+                            tuned_name = tuned_cfg.get("name") or tuned_cfg.get("type", "<unnamed>")
+                            print(
+                                f"[hypothesis] tuned unsup {tuned_name} trials={tried} metric={metric_disp}"
+                            )
+                        disp_name = f"{tuned_cfg.get('name', cfg['name'])}[{prep_name}|{display_metric}]"
+                        det = build_detector(tuned_cfg)
                         det.fit(X_train)
                         scores_test = det.score(X_test)
                         unsup_results.append(_collect_summary(disp_name, scores_test, runner))
@@ -425,16 +437,31 @@ def _evaluate_with_sweep(runner: ExperimentRunner) -> None:
             if runner.cfg.enable_supervised and runner.cfg.supervised_detectors:
                 for spec in runner.cfg.supervised_detectors:
                     cfg = _normalize_detector_spec(spec)
-                    det = build_detector(cfg)
+                    tuned_cfg, best_metric, tried = runner._maybe_random_search_sup(
+                        cfg,
+                        X_val[runner.sup_fit_idx],
+                        runner.val_y[runner.sup_fit_idx],
+                        X_val[runner.sup_cal_idx],
+                        runner.val_y[runner.sup_cal_idx],
+                    )
+                    if tried > 1:
+                        metric_disp = f"{best_metric:.4f}" if best_metric is not None else "n/a"
+                        tuned_name = tuned_cfg.get("name") or tuned_cfg.get("type", "<unnamed>")
+                        print(
+                            f"[hypothesis] tuned sup {tuned_name} trials={tried} metric={metric_disp}"
+                        )
+                    disp_name = f"{tuned_cfg.get('name', cfg['name'])}[{prep_name}|default]"
+                    det = build_detector(tuned_cfg)
                     det.fit(X_val[runner.sup_fit_idx], runner.val_y[runner.sup_fit_idx])
                     scores_test = det.score(X_test)
-                    disp_name = f"{cfg['name']}[{prep_name}|default]"
                     sup_results.append(_collect_summary(disp_name, scores_test, runner))
 
             if unsup_results:
                 _print_block("[unsupervised]", unsup_results)
             if sup_results:
                 _print_block("[supervised]", sup_results)
+
+        runner.cfg.random_search_trials = orig_trials
 
 
 def run_diagnostic(eval_config: str, data_dir: str, run_dir: str, *, enable_rep_metric_sweep: bool = False) -> None:
