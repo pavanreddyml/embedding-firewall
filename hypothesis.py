@@ -192,12 +192,15 @@ def _summarize_detector(
 ) -> None:
     y_mal_only = runner.test_y
     y_mal_or_bl = np.where(runner.test_is_malicious | runner.test_is_borderline, 1, 0)
+    y_normal = np.where(runner.test_is_normal, 1, 0)
+    scores_normal = -scores_test
 
     m1, m2 = _metrics_pair(
         scores=scores_test,
         y_malicious_only=y_mal_only,
         y_mal_or_borderline=y_mal_or_bl,
     )
+    m_norm = ExperimentRunner._metrics_summary(y_normal, scores_normal)
 
     stats_norm = _group_stats(scores_test, runner.test_is_normal)
     stats_bl = _group_stats(scores_test, runner.test_is_borderline)
@@ -208,6 +211,11 @@ def _summarize_detector(
     print("  AUROC (malicious + borderline +):", m2.get("auroc"))
     print("  AUPRC (malicious only +):   ", m1.get("auprc"))
     print("  AUPRC (malicious + borderline +):", m2.get("auprc"))
+    print(
+        "  AUROC (normal-only +, inverted scores):",
+        m_norm.get("auroc"),
+        f"[normals={int(np.sum(y_normal))}]",
+    )
     print("  Score means/p95/p99 by label:")
     print(f"    normal     mean={stats_norm['mean']:.4f} p95={stats_norm['p95']:.4f} p99={stats_norm['p99']:.4f}")
     print(f"    borderline mean={stats_bl['mean']:.4f} p95={stats_bl['p95']:.4f} p99={stats_bl['p99']:.4f}")
