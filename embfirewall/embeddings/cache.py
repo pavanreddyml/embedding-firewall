@@ -73,24 +73,18 @@ class EmbeddingCache:
         if not pending:
             return
 
-        # The cache directory could be deleted externally (e.g., remounting a
-        # drive). Ensure it exists before writing shards so we don't silently
-        # drop pending items due to a missing parent directory.
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-
         # model identifiers sometimes include path separators (e.g. HF repos
         # like "BAAI/bge-m3"), which would otherwise create unintended
         # directories. Replace them with a safe token so shards stay under the
         # configured cache directory.
-        safe_model_id = model_id.replace("/", "__").replace(os.sep, "__")
-        if os.altsep:
-            safe_model_id = safe_model_id.replace(os.altsep, "__")
+        safe_model_id = model_id.replace(os.sep, "__")
 
         timestamp = int(time.time() * 1000)
+        shard_idx = 0
 
         while pending:
             shard_items = dict(list(pending.items())[: self.shard_size])
-            shard_name = f"{safe_model_id}_shard_{timestamp}_{self._shard_counter}.pkl"
+            shard_name = f"{safe_model_id}_shard_{timestamp}_{shard_idx}.pkl"
             shard_path = self.cache_dir / shard_name
             serializable = {model_id: {t: vec.tolist() for t, vec in shard_items.items()}}
             with shard_path.open("wb") as f:
@@ -99,7 +93,7 @@ class EmbeddingCache:
             for key in shard_items.keys():
                 pending.pop(key, None)
 
-            self._shard_counter += 1
+            shard_idx += 1
 
         self._pending[model_id] = pending
 
