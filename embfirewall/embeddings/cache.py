@@ -4,6 +4,7 @@ from __future__ import annotations
 import pickle
 import time
 from collections import defaultdict
+import os
 from pathlib import Path
 from typing import DefaultDict, Dict, Mapping, Optional
 
@@ -69,13 +70,29 @@ class EmbeddingCache:
         if not pending:
             return
 
-        shard_name = f"{model_id}_shard_{int(time.time())}.pkl"
-        shard_path = self.cache_dir / shard_name
-        serializable = {model_id: {t: vec.tolist() for t, vec in pending.items()}}
-        with shard_path.open("wb") as f:
-            pickle.dump(serializable, f)
+        # model identifiers sometimes include path separators (e.g. HF repos
+        # like "BAAI/bge-m3"), which would otherwise create unintended
+        # directories. Replace them with a safe token so shards stay under the
+        # configured cache directory.
+        safe_model_id = model_id.replace(os.sep, "__")
 
-        self._pending[model_id] = {}
+        timestamp = int(time.time() * 1000)
+        shard_idx = 0
+
+        while pending:
+            shard_items = dict(list(pending.items())[: self.shard_size])
+            shard_name = f"{safe_model_id}_shard_{timestamp}_{shard_idx}.pkl"
+            shard_path = self.cache_dir / shard_name
+            serializable = {model_id: {t: vec.tolist() for t, vec in shard_items.items()}}
+            with shard_path.open("wb") as f:
+                pickle.dump(serializable, f)
+
+            for key in shard_items.keys():
+                pending.pop(key, None)
+
+            shard_idx += 1
+
+        self._pending[model_id] = pending
 
     def flush_all(self) -> None:
         for model_id in list(self._pending.keys()):
