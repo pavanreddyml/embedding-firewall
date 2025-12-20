@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+from scipy.stats import randint, uniform
 from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.model_selection import PredefinedSplit, RandomizedSearchCV
+from sklearn.utils.fixes import loguniform
 from tqdm import tqdm
 
 from .detectors import DEFAULT_PATTERNS, KeywordBaseline
@@ -62,6 +65,11 @@ class RunConfig:
     enable_unsupervised: bool = True
     enable_supervised: bool = True
     enable_keyword: bool = True
+
+    # Hyperparameter search (only applied to cheap/local embeddings)
+    random_search_trials: int = 0
+    random_search_metric: str = "auroc"
+    random_search_seed: int = 1234
 
     unsupervised_detectors: Optional[List[Dict[str, Any]]] = None
     supervised_detectors: Optional[List[Dict[str, Any]]] = None
@@ -165,6 +173,9 @@ class RunConfig:
         if self.unsupervised_positive_labels is None:
             self.unsupervised_positive_labels = (self.malicious_label, self.borderline_label)
 
+        self.random_search_trials = max(0, int(self.random_search_trials))
+        self.random_search_seed = int(self.random_search_seed)
+
 
 def ensure_parent_dir(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -187,6 +198,8 @@ class ExperimentRunner:
     def __init__(self, cfg: RunConfig, data: DatasetSlices):
         self.cfg = cfg
         self.data = data
+
+        self.rng = np.random.RandomState(cfg.random_search_seed)
 
         self.run_dir = Path(cfg.run_dir)
         self.run_dir.mkdir(parents=True, exist_ok=True)
@@ -315,6 +328,221 @@ class ExperimentRunner:
             "borderline_block_ci95": [float(bl_ci[0]), float(bl_ci[1])],
         }
 
+    def _metric_value(self, y: np.ndarray, scores: np.ndarray) -> float:
+        summary = self._metrics_summary(y, scores)
+        key = self.cfg.random_search_metric
+        if key not in summary or summary[key] is None:
+            # fall back to any available metric
+            for alt in ("auroc", "auprc"):
+                if summary.get(alt) is not None:
+                    return float(summary[alt])
+            return float("-inf")
+        return float(summary[key])
+
+    @staticmethod
+    def _is_expensive_detector(spec: Dict[str, Any]) -> bool:
+        t = str(spec.get("type", "")).lower()
+        return t in {"autoencoder", "vae", "gan"}
+
+    def _param_distributions(self, base: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Return (defaults, distributions) for RandomizedSearchCV."""
+
+        defaults: Dict[str, Any] = {}
+        dists: Dict[str, Any] = {}
+
+        t = str(base.get("type", "")).lower()
+
+        def _def(key: str, value: Any) -> None:
+            defaults[key] = base.get(key, value)
+
+        if t == "logreg":
+            _def("C", 1.0)
+            dists["C"] = loguniform(0.01, 15.0)
+            _def("class_weight", None)
+            dists["class_weight"] = [None, "balanced"]
+        elif t == "linsvm":
+            _def("C", 1.0)
+            dists["C"] = loguniform(0.01, 8.0)
+            _def("class_weight", None)
+            dists["class_weight"] = [None, "balanced"]
+            _def("calibration_cv", 5)
+            dists["calibration_cv"] = [3, 5, 10]
+            _def("calibration_method", "sigmoid")
+            dists["calibration_method"] = ["sigmoid", "isotonic"]
+        elif t == "hgbt":
+            _def("learning_rate", 0.05)
+            dists["learning_rate"] = uniform(0.02, 0.18)
+            _def("max_depth", 10)
+            dists["max_depth"] = randint(3, 14)
+            _def("max_iter", 400)
+            dists["max_iter"] = randint(150, 600)
+            _def("l2_regularization", 0.1)
+            dists["l2_regularization"] = loguniform(1e-4, 1.0)
+        elif t == "knn":
+            _def("k", 5)
+            dists["k"] = randint(3, 50)
+        elif t == "ocsvm":
+            _def("nu", 0.05)
+            dists["nu"] = uniform(0.01, 0.19)
+            _def("kernel", "rbf")
+            dists["kernel"] = ["rbf", "sigmoid"]
+            _def("gamma", "scale")
+            dists["gamma"] = ["scale", "auto"]
+        elif t == "iforest":
+            _def("n_estimators", 400)
+            dists["n_estimators"] = randint(100, 500)
+            _def("contamination", 0.05)
+            dists["contamination"] = uniform(0.01, 0.19)
+            _def("max_samples", "auto")
+            dists["max_samples"] = ["auto", 0.5, 0.8, 1.0]
+            _def("random_state", self.cfg.random_search_seed)
+        elif t == "mahalanobis":
+            pass
+        elif t == "pca":
+            _def("n_components", 64)
+            dists["n_components"] = randint(8, 256)
+            _def("whiten", False)
+            dists["whiten"] = [True, False]
+        elif t in {"gmm", "gmm_energy", "gaussian_mixture"}:
+            _def("n_components", 3)
+            dists["n_components"] = randint(2, 24)
+            _def("covariance_type", "full")
+            dists["covariance_type"] = ["full", "diag"]
+            _def("reg_covar", 1e-3)
+            dists["reg_covar"] = loguniform(1e-5, 1e-2)
+            _def("max_iter", 300)
+            dists["max_iter"] = randint(150, 450)
+            _def("random_state", self.cfg.random_search_seed)
+
+        return defaults, dists
+
+    def _make_cv_split(self, n_train: int, n_val: int) -> PredefinedSplit:
+        folds = np.concatenate([np.full(n_train, -1, dtype=int), np.zeros(n_val, dtype=int)])
+        return PredefinedSplit(folds)
+
+    def _build_search_estimator(
+        self,
+        base_spec: Dict[str, Any],
+        param_defaults: Dict[str, Any],
+        *,
+        supervised: bool,
+    ):
+        self_outer = self
+
+        class _DetectorEstimator:
+            def __init__(self, **params: Any):
+                self.params = params
+                self._detector = None
+
+            def get_params(self, deep: bool = True) -> Dict[str, Any]:
+                return dict(self.params)
+
+            def set_params(self, **params: Any):
+                for k, v in params.items():
+                    self.params[k] = v
+                return self
+
+            def fit(self, X, y=None):
+                spec = dict(base_spec)
+                spec.update(self.params)
+                spec.setdefault("random_state", self.params.get("random_state", self.params.get("seed")))
+                self._detector = build_detector(spec)
+                if supervised:
+                    self._detector.fit(X, y)
+                else:
+                    self._detector.fit(X)
+                return self
+
+            def score(self, X, y=None):
+                if self._detector is None:
+                    raise RuntimeError("Detector not fit")
+                scores = self._detector.score(X)
+                if y is None:
+                    return float("-inf")
+                return float(self_outer._metric_value(np.asarray(y, dtype=np.int32), np.asarray(scores)))
+
+        return _DetectorEstimator(**param_defaults)
+
+    def _run_random_search(
+        self,
+        base_spec: Dict[str, Any],
+        X_train: np.ndarray,
+        X_val: np.ndarray,
+        y_val: np.ndarray,
+        *,
+        supervised: bool,
+        y_train: Optional[np.ndarray] = None,
+    ) -> Tuple[Dict[str, Any], Optional[float], int]:
+        if self.cfg.random_search_trials <= 0 or self._is_expensive_detector(base_spec):
+            return base_spec, None, 0
+
+        defaults, dists = self._param_distributions(base_spec)
+        tried = 0
+
+        det = build_detector(base_spec)
+        if supervised:
+            det.fit(X_train, y_train)
+        else:
+            det.fit(X_train)
+        base_scores_val = det.score(X_val)
+        best_metric = self._metric_value(y_val, base_scores_val)
+        best_spec = dict(base_spec)
+        tried += 1
+
+        if not dists:
+            return best_spec, best_metric, tried
+
+        estimator = self._build_search_estimator(base_spec, defaults, supervised=supervised)
+        X_combined = np.concatenate([X_train, X_val])
+        y_combined = np.concatenate([
+            (np.asarray(y_train, dtype=np.int32) if supervised and y_train is not None else np.zeros(X_train.shape[0], dtype=np.int32)),
+            np.asarray(y_val, dtype=np.int32),
+        ])
+        cv = self._make_cv_split(X_train.shape[0], X_val.shape[0])
+
+        try:
+            search = RandomizedSearchCV(
+                estimator,
+                dists,
+                n_iter=self.cfg.random_search_trials,
+                random_state=self.cfg.random_search_seed,
+                scoring=None,
+                cv=cv,
+                n_jobs=1,
+                refit=False,
+            )
+            search.fit(X_combined, y_combined)
+            tried += len(search.cv_results_.get("params", []))
+
+            if search.best_params_:
+                search_metric = float(search.best_score_)
+                if search_metric > best_metric:
+                    best_spec = dict(base_spec)
+                    best_spec.update(search.best_params_)
+                    best_metric = search_metric
+        except Exception as exc:
+            print(f"[runner] RandomizedSearchCV failed for {base_spec}: {exc}")
+
+        return best_spec, best_metric, tried
+
+    def _maybe_random_search_unsup(
+        self,
+        base_spec: Dict[str, Any],
+        X_train: np.ndarray,
+        X_val: np.ndarray,
+    ) -> Tuple[Dict[str, Any], Optional[float], int]:
+        return self._run_random_search(base_spec, X_train, X_val, self.val_y, supervised=False)
+
+    def _maybe_random_search_sup(
+        self,
+        base_spec: Dict[str, Any],
+        X_fit: np.ndarray,
+        y_fit: np.ndarray,
+        X_val: np.ndarray,
+        y_val: np.ndarray,
+    ) -> Tuple[Dict[str, Any], Optional[float], int]:
+        return self._run_random_search(base_spec, X_fit, X_val, y_val, supervised=True, y_train=y_fit)
+
     def _embed(self, emb_spec: EmbeddingSpec, texts: List[str]) -> Tuple[np.ndarray, float]:
         t0_total = time.time()
 
@@ -416,9 +644,13 @@ class ExperimentRunner:
 
             # Unsupervised detectors: fit(train_normal_only) -> score(val/test)
             if self.cfg.enable_unsupervised and self.cfg.unsupervised_detectors:
-                det_specs = self.cfg.unsupervised_detectors
-                det_bar = tqdm(det_specs, desc=f"[runner] detectors (unsup) [{emb_spec.name}]", unit="det", leave=False)
-                for spec in det_bar:
+                tuned_specs: List[Tuple[Dict[str, Any], Optional[float], int]] = []
+                for spec in self.cfg.unsupervised_detectors:
+                    best_spec, best_metric, tried = self._maybe_random_search_unsup(spec, X_train, X_val)
+                    tuned_specs.append((best_spec, best_metric, tried))
+
+                det_bar = tqdm([s[0] for s in tuned_specs], desc=f"[runner] detectors (unsup) [{emb_spec.name}]", unit="det", leave=False)
+                for idx, spec in enumerate([s[0] for s in tuned_specs]):
                     det = build_detector(spec)
                     det_bar.set_postfix_str(det.name)
                     print(f"[runner] Unsupervised detector={det.name}: fit(train) + score(val/test)")
@@ -447,6 +679,9 @@ class ExperimentRunner:
                             scores_test=scores_test,
                         )
 
+                    best_metric = tuned_specs[idx][1]
+                    tried = tuned_specs[idx][2]
+
                     results["runs"].append(
                         {
                             "type": "embedding_unsupervised",
@@ -464,14 +699,33 @@ class ExperimentRunner:
                                 "set": self.cfg.threshold_calibration_set,
                                 "n_normal": int(cal_normals.shape[0]),
                             },
+                            "tuning": (
+                                {
+                                    "metric": self.cfg.random_search_metric,
+                                    "best_val": (float(best_metric) if best_metric is not None else None),
+                                    "trials": int(tried),
+                                }
+                                if tried > 0
+                                else None
+                            ),
                         }
                     )
 
             # Supervised detectors: fit(val_fit) -> score(val_cal/test); thresholds calibrated on val_cal normals
             if self.cfg.enable_supervised and self.cfg.supervised_detectors:
-                det_specs = self.cfg.supervised_detectors
-                det_bar = tqdm(det_specs, desc=f"[runner] detectors (sup) [{emb_spec.name}]", unit="det", leave=False)
-                for spec in det_bar:
+                tuned_specs: List[Tuple[Dict[str, Any], Optional[float], int]] = []
+                for spec in self.cfg.supervised_detectors:
+                    best_spec, best_metric, tried = self._maybe_random_search_sup(
+                        spec,
+                        X_val[self.sup_fit_idx],
+                        self.val_y[self.sup_fit_idx],
+                        X_val[self.sup_cal_idx],
+                        self.val_y[self.sup_cal_idx],
+                    )
+                    tuned_specs.append((best_spec, best_metric, tried))
+
+                det_bar = tqdm([s[0] for s in tuned_specs], desc=f"[runner] detectors (sup) [{emb_spec.name}]", unit="det", leave=False)
+                for idx, spec in enumerate([s[0] for s in tuned_specs]):
                     det = build_detector(spec)
                     det_bar.set_postfix_str(det.name)
                     print(f"[runner] Supervised detector={det.name}: fit(val_fit) + score(val_cal/test)")
@@ -499,6 +753,9 @@ class ExperimentRunner:
                             scores_test=scores_test,
                         )
 
+                    best_metric = tuned_specs[idx][1]
+                    tried = tuned_specs[idx][2]
+
                     results["runs"].append(
                         {
                             "type": "embedding_supervised",
@@ -517,6 +774,15 @@ class ExperimentRunner:
                                 "val_cal_n": int(self.sup_cal_idx.shape[0]),
                                 "val_cal_normals": int(np.sum(self.val_cal_is_normal)),
                             },
+                            "tuning": (
+                                {
+                                    "metric": self.cfg.random_search_metric,
+                                    "best_val": (float(best_metric) if best_metric is not None else None),
+                                    "trials": int(tried),
+                                }
+                                if tried > 0
+                                else None
+                            ),
                         }
                     )
 
