@@ -32,6 +32,27 @@ benign, borderline, and malicious prompts:
   a calibrated linear SVM (`linsvm_calibrated`), and a HistGradientBoostingClassifier (`hgbt`). These models are
   better at carving out borderline prompts without letting false positives spike.
 
+### Advanced unsupervised detectors
+
+You can now try deeper unsupervised models implemented in PyTorch (no TensorFlow needed):
+
+- `autoencoder` / `ae`: MLP autoencoder scored via reconstruction error. Tunables: `hidden_dims`, `latent_dim`,
+  `epochs`, `dropout`, and `device`.
+- `vae`: variational autoencoder with configurable `beta` weight on the KL term for sharper separation of hard cases.
+- `gan` / `gan_discriminator`: lightweight GAN that treats `(1 - D(x))` as the anomaly score and supports feature
+  matching (`feature_match_weight`) to stabilize training.
+
+Config snippet:
+
+```yaml
+detectors:
+  - {type: autoencoder, hidden_dims: [512, 256], latent_dim: 128, epochs: 50, batch_size: 512, device: cuda}
+  - {type: vae, beta: 1.5, hidden_dims: [512, 256], latent_dim: 96, epochs: 60, device: cuda}
+  - {type: gan, hidden_dims: [512, 256], noise_dim: 96, feature_match_weight: 5.0, epochs: 60, device: cuda}
+```
+
+They plug into `run_eval.py` the same way as the classical baselines.
+
 Run `python run_eval.py --eval-config configs/eval_config.yaml --run-dir runs/baseline_upgrade` to execute the enlarged
 grid and capture plots/metrics for the paper.
 
