@@ -17,13 +17,16 @@ class EmbeddingCache:
     Embeddings are grouped by model identifier and stored as pickle shards with the
     structure ``{"model": {"text": [embedding list]}}``. Each shard only contains
     new items accumulated since the previous flush, keeping write sizes around the
-    configured ``shard_size`` (default 5,000).
+    configured ``shard_size`` (default 5,000). Shards are written as soon as the
+    pending queue for a given model crosses that threshold, so persistence happens
+    incrementally during long batches rather than only once everything finishes.
     """
 
     def __init__(self, cache_dir: Path, *, shard_size: int = 5000) -> None:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.shard_size = int(shard_size)
+        self._shard_counter = 0
 
         self._store: DefaultDict[str, Dict[str, np.ndarray]] = defaultdict(dict)
         self._pending: DefaultDict[str, Dict[str, np.ndarray]] = defaultdict(dict)
