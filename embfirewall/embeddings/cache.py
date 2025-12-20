@@ -4,6 +4,7 @@ from __future__ import annotations
 import pickle
 import time
 from collections import defaultdict
+import os
 from pathlib import Path
 from typing import DefaultDict, Dict, Mapping, Optional
 
@@ -16,13 +17,16 @@ class EmbeddingCache:
     Embeddings are grouped by model identifier and stored as pickle shards with the
     structure ``{"model": {"text": [embedding list]}}``. Each shard only contains
     new items accumulated since the previous flush, keeping write sizes around the
-    configured ``shard_size`` (default 5,000).
+    configured ``shard_size`` (default 5,000). Shards are written as soon as the
+    pending queue for a given model crosses that threshold, so persistence happens
+    incrementally during long batches rather than only once everything finishes.
     """
 
     def __init__(self, cache_dir: Path, *, shard_size: int = 5000) -> None:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.shard_size = int(shard_size)
+        self._shard_counter = 0
 
         self._store: DefaultDict[str, Dict[str, np.ndarray]] = defaultdict(dict)
         self._pending: DefaultDict[str, Dict[str, np.ndarray]] = defaultdict(dict)
@@ -69,13 +73,35 @@ class EmbeddingCache:
         if not pending:
             return
 
-        shard_name = f"{model_id}_shard_{int(time.time())}.pkl"
-        shard_path = self.cache_dir / shard_name
-        serializable = {model_id: {t: vec.tolist() for t, vec in pending.items()}}
-        with shard_path.open("wb") as f:
-            pickle.dump(serializable, f)
+        # The cache directory could be deleted externally (e.g., remounting a
+        # drive). Ensure it exists before writing shards so we don't silently
+        # drop pending items due to a missing parent directory.
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-        self._pending[model_id] = {}
+        # model identifiers sometimes include path separators (e.g. HF repos
+        # like "BAAI/bge-m3"), which would otherwise create unintended
+        # directories. Replace them with a safe token so shards stay under the
+        # configured cache directory.
+        safe_model_id = model_id.replace("/", "__").replace(os.sep, "__")
+        if os.altsep:
+            safe_model_id = safe_model_id.replace(os.altsep, "__")
+
+        timestamp = int(time.time() * 1000)
+
+        while pending:
+            shard_items = dict(list(pending.items())[: self.shard_size])
+            shard_name = f"{safe_model_id}_shard_{timestamp}_{self._shard_counter}.pkl"
+            shard_path = self.cache_dir / shard_name
+            serializable = {model_id: {t: vec.tolist() for t, vec in shard_items.items()}}
+            with shard_path.open("wb") as f:
+                pickle.dump(serializable, f)
+
+            for key in shard_items.keys():
+                pending.pop(key, None)
+
+            self._shard_counter += 1
+
+        self._pending[model_id] = pending
 
     def flush_all(self) -> None:
         for model_id in list(self._pending.keys()):
