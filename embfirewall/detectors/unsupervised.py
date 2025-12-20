@@ -8,6 +8,7 @@ from sklearn.covariance import LedoitWolf
 from sklearn.decomposition import PCA
 from sklearn.ensemble import IsolationForest
 from sklearn.mixture import GaussianMixture
+from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import LocalOutlierFactor, NearestNeighbors
 from sklearn.svm import OneClassSVM
 import torch
@@ -18,9 +19,10 @@ from .base import Detector
 
 
 class CentroidDistance(Detector):
-    def __init__(self, name: str = "centroid") -> None:
+    def __init__(self, name: str = "centroid", metric: str = "euclidean") -> None:
         super().__init__(name=name)
         self.centroid_: Optional[np.ndarray] = None
+        self.metric = str(metric)
 
     def fit(self, X_train: np.ndarray, y_train: Optional[np.ndarray] = None) -> "CentroidDistance":
         if not isinstance(X_train, np.ndarray) or X_train.ndim != 2 or X_train.shape[0] == 0:
@@ -31,25 +33,52 @@ class CentroidDistance(Detector):
     def score(self, X: np.ndarray) -> np.ndarray:
         if self.centroid_ is None:
             raise RuntimeError("CentroidDistance not fitted")
-        diff = X - self.centroid_[None, :]
-        return np.linalg.norm(diff, axis=1)
+        if self.metric == "dot":
+            # Negative dot product so that higher => more anomalous (lower similarity)
+            return -np.dot(X, self.centroid_).reshape(-1)
+        if self.metric in ("euclidean", "l2"):
+            diff = X - self.centroid_[None, :]
+            return np.linalg.norm(diff, axis=1)
+        if self.metric in ("manhattan", "l1"):
+            diff = X - self.centroid_[None, :]
+            return np.sum(np.abs(diff), axis=1)
+        d = pairwise_distances(X, self.centroid_[None, :], metric=self.metric)
+        return d.reshape(-1)
 
 
 class KNNDistance(Detector):
-    def __init__(self, k: int = 10, name: str = "knn") -> None:
+    def __init__(self, k: int = 10, name: str = "knn", metric: str = "euclidean") -> None:
         super().__init__(name=name)
         self.k = int(k)
         self.nn_: Optional[NearestNeighbors] = None
+        self.metric = str(metric)
+        self._train_: Optional[np.ndarray] = None
 
     def fit(self, X_train: np.ndarray, y_train: Optional[np.ndarray] = None) -> "KNNDistance":
         if not isinstance(X_train, np.ndarray) or X_train.ndim != 2 or X_train.shape[0] == 0:
             raise ValueError(f"KNNDistance.fit expects 2D non-empty array, got {getattr(X_train, 'shape', None)}")
         k = max(1, int(self.k))
-        self.nn_ = NearestNeighbors(n_neighbors=k, metric="euclidean")
-        self.nn_.fit(X_train)
+        if self.metric == "dot":
+            self._train_ = X_train
+            self.nn_ = None
+        else:
+            self.nn_ = NearestNeighbors(n_neighbors=k, metric=self.metric)
+            self.nn_.fit(X_train)
+            self._train_ = None
         return self
 
     def score(self, X: np.ndarray) -> np.ndarray:
+        if self.metric == "dot":
+            if self._train_ is None:
+                raise RuntimeError("KNNDistance not fitted")
+            sims = np.matmul(X, self._train_.T)
+            k = max(1, int(self.k))
+            if k >= sims.shape[1]:
+                topk = sims
+            else:
+                idx = np.argpartition(sims, -k, axis=1)[:, -k:]
+                topk = np.take_along_axis(sims, idx, axis=1)
+            return -np.mean(topk, axis=1)
         if self.nn_ is None:
             raise RuntimeError("KNNDistance not fitted")
         dists, _ = self.nn_.kneighbors(X, return_distance=True)
@@ -152,18 +181,20 @@ class LocalOutlierFactorDetector(Detector):
         leaf_size: int = 30,
         name: str = "lof",
         n_jobs: int = -1,
+        metric: str = "euclidean",
     ) -> None:
         super().__init__(name=name)
         self.n_neighbors = int(n_neighbors)
         self.leaf_size = int(leaf_size)
         self.n_jobs = int(n_jobs)
         self.model_: Optional[LocalOutlierFactor] = None
+        self.metric = str(metric)
 
     def fit(self, X_train: np.ndarray, y_train: Optional[np.ndarray] = None) -> "LocalOutlierFactorDetector":
         self.model_ = LocalOutlierFactor(
             n_neighbors=self.n_neighbors,
             leaf_size=self.leaf_size,
-            metric="euclidean",
+            metric=self.metric,
             novelty=True,
             n_jobs=self.n_jobs,
         )
