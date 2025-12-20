@@ -343,6 +343,24 @@ class ExperimentRunner:
         t = str(spec.get("type", "")).lower()
         return t in {"autoencoder", "vae", "gan"}
 
+    def _random_search_trials_for_spec(self, spec: Dict[str, Any]) -> int:
+        """Cap random search trials for slower detectors."""
+
+        base_trials = max(0, int(self.cfg.random_search_trials))
+        if base_trials == 0:
+            return 0
+
+        det_type = str(spec.get("type", "")).lower()
+        slow_types = {"linsvm", "ocsvm", "iforest", "lof"}
+        if det_type in slow_types:
+            return min(base_trials, 8)
+
+        return base_trials
+
+    @staticmethod
+    def _fmt_spec(spec: Dict[str, Any]) -> str:
+        return ", ".join(f"{k}={v}" for k, v in sorted(spec.items()))
+
     def _randomize_spec(self, base: Dict[str, Any]) -> Dict[str, Any]:
         """Generate a single random variation of a detector spec."""
 
@@ -396,7 +414,11 @@ class ExperimentRunner:
         X_train: np.ndarray,
         X_val: np.ndarray,
     ) -> Tuple[Dict[str, Any], Optional[float], int]:
-        if self.cfg.random_search_trials <= 0 or self._is_expensive_detector(base_spec):
+        if self._is_expensive_detector(base_spec):
+            return base_spec, None, 0
+
+        trials = self._random_search_trials_for_spec(base_spec)
+        if trials <= 0:
             return base_spec, None, 0
 
         best_spec = dict(base_spec)
@@ -406,8 +428,17 @@ class ExperimentRunner:
         best_metric = self._metric_value(self.val_y, base_scores_val)
         tried = 1
 
-        for _ in range(self.cfg.random_search_trials):
+        print(
+            f"[runner] random search unsup base {best_spec.get('name', best_spec.get('type'))}: "
+            f"{self._fmt_spec(best_spec)}"
+        )
+
+        for idx in range(trials):
             candidate = self._randomize_spec(base_spec)
+            print(
+                f"[runner] random search unsup trial {idx + 1}/{trials} "
+                f"{candidate.get('name', candidate.get('type'))}: {self._fmt_spec(candidate)}"
+            )
             try:
                 det_c = build_detector(candidate)
                 det_c.fit(X_train)
@@ -431,7 +462,11 @@ class ExperimentRunner:
         X_val: np.ndarray,
         y_val: np.ndarray,
     ) -> Tuple[Dict[str, Any], Optional[float], int]:
-        if self.cfg.random_search_trials <= 0 or self._is_expensive_detector(base_spec):
+        if self._is_expensive_detector(base_spec):
+            return base_spec, None, 0
+
+        trials = self._random_search_trials_for_spec(base_spec)
+        if trials <= 0:
             return base_spec, None, 0
 
         best_spec = dict(base_spec)
@@ -441,8 +476,17 @@ class ExperimentRunner:
         best_metric = self._metric_value(y_val, base_scores_val)
         tried = 1
 
-        for _ in range(self.cfg.random_search_trials):
+        print(
+            f"[runner] random search sup base {best_spec.get('name', best_spec.get('type'))}: "
+            f"{self._fmt_spec(best_spec)}"
+        )
+
+        for idx in range(trials):
             candidate = self._randomize_spec(base_spec)
+            print(
+                f"[runner] random search sup trial {idx + 1}/{trials} "
+                f"{candidate.get('name', candidate.get('type'))}: {self._fmt_spec(candidate)}"
+            )
             try:
                 det_c = build_detector(candidate)
                 det_c.fit(X_fit, y_fit)

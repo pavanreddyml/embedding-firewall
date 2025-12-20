@@ -26,12 +26,15 @@ for each label group. It does not write figures or JSON results.
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Tuple
 
 import numpy as np
 
 from embfirewall.detectors.factory import build_detector
+from embfirewall.embeddings.cache import EmbeddingCache
+from embfirewall.embeddings.factory import build_embedder
 from embfirewall.runner import DatasetSlices, ExperimentRunner, RunConfig
 from run_eval import (
     CHEAP_EMBED_KINDS,
@@ -45,6 +48,50 @@ from run_eval import (
     _load_val,
     _parse_embeddings,
 )
+
+
+def _cache_key(emb_spec) -> str:
+    return str(emb_spec.model_id)
+
+
+def _embed_with_cache(emb_spec, texts: List[str], cache: EmbeddingCache, *, embedder=None):
+    """Embed texts while reading/writing from a local shard cache."""
+
+    t0 = time.time()
+    model_key = _cache_key(emb_spec)
+
+    if not texts:
+        return np.empty((0, 0), dtype=np.float32), 0.0
+
+    cached: List[np.ndarray | None] = []
+    missing_texts: List[str] = []
+    missing_indices: List[int] = []
+
+    for idx, text in enumerate(texts):
+        cached_emb = cache.get(model_key, text)
+        if cached_emb is not None:
+            cached.append(cached_emb)
+        else:
+            cached.append(None)
+            missing_texts.append(text)
+            missing_indices.append(idx)
+
+    owned_embedder = embedder is None
+    embedder = embedder or build_embedder(emb_spec)
+    try:
+        if missing_texts:
+            new_vecs, _ = embedder.embed(missing_texts, desc=f"embed[{emb_spec.name}]")
+            for idx, vec in zip(missing_indices, new_vecs):
+                cached[idx] = vec
+                cache.add(model_key, texts[idx], vec)
+
+        embeddings = np.vstack([np.asarray(vec, dtype=np.float32).reshape(1, -1) for vec in cached])
+    finally:
+        if owned_embedder:
+            embedder.close()
+
+    dt_total = float(time.time() - t0)
+    return embeddings, dt_total
 
 
 def _metrics_pair(
@@ -391,12 +438,22 @@ def _print_block(title: str, results: Iterable[Dict[str, object]]) -> None:
         )
 
 
-def _evaluate_with_sweep(runner: ExperimentRunner) -> None:
+def _evaluate_with_sweep(runner: ExperimentRunner, cache: EmbeddingCache) -> None:
     for emb_spec in runner.cfg.embedding_models:
         _print_header(f"Embedding: {emb_spec.name} ({emb_spec.model_id}) [{runner.cfg.dataset_name}]")
-        X_train_raw, _ = runner._embed(emb_spec, runner.data.train_texts)
-        X_val_raw, _ = runner._embed(emb_spec, runner.data.val_texts)
-        X_test_raw, _ = runner._embed(emb_spec, runner.data.test_texts)
+        embedder = build_embedder(emb_spec)
+        try:
+            X_train_raw, _ = _embed_with_cache(
+                emb_spec, runner.data.train_texts, cache, embedder=embedder
+            )
+            X_val_raw, _ = _embed_with_cache(
+                emb_spec, runner.data.val_texts, cache, embedder=embedder
+            )
+            X_test_raw, _ = _embed_with_cache(
+                emb_spec, runner.data.test_texts, cache, embedder=embedder
+            )
+        finally:
+            embedder.close()
 
         preproc_modes = _normalize(X_train=X_train_raw, X_val=X_val_raw, X_test=X_test_raw)
         cheap_embed = emb_spec.kind in CHEAP_EMBED_KINDS
@@ -467,6 +524,9 @@ def _evaluate_with_sweep(runner: ExperimentRunner) -> None:
 def run_diagnostic(eval_config: str, data_dir: str, run_dir: str, *, enable_rep_metric_sweep: bool = False) -> None:
     eval_cfg = _load_eval_config(eval_config)
 
+    cache_dir = Path(data_dir).resolve().parent / "cache"
+    cache = EmbeddingCache(cache_dir)
+
     labels_cfg = eval_cfg.get("labels") or {}
     normal_label = str(labels_cfg.get("normal_label", "normal"))
     borderline_label = str(labels_cfg.get("borderline_label", "borderline"))
@@ -477,75 +537,90 @@ def run_diagnostic(eval_config: str, data_dir: str, run_dir: str, *, enable_rep_
     if not dataset_dirs:
         raise SystemExit(f"[hypothesis] No dataset folders found under {data_dir}")
 
-    for dataset_name, dataset_dir in dataset_dirs:
-        runner, _ = _build_runner(eval_cfg, str(dataset_dir), str(Path(run_dir) / dataset_name), dataset_name)
+    try:
+        for dataset_name, dataset_dir in dataset_dirs:
+            runner, _ = _build_runner(
+                eval_cfg, str(dataset_dir), str(Path(run_dir) / dataset_name), dataset_name
+            )
 
-        _print_header(f"Dataset: {dataset_name}")
-        print(
-            f"train={len(runner.data.train_texts)} val={len(runner.data.val_texts)} test={len(runner.data.test_texts)}"
-        )
-        print(
-            "val counts:",
-            {
-                "normal": int(np.sum(runner.val_is_normal)),
-                "malicious": int(np.sum(runner.val_y)),
-            },
-        )
-        print(
-            "test counts:",
-            {
-                "normal": int(np.sum(runner.test_is_normal)),
-                "borderline": int(np.sum(runner.test_is_borderline)),
-                "malicious": int(np.sum(runner.test_is_malicious)),
-            },
-        )
+            _print_header(f"Dataset: {dataset_name}")
+            print(
+                f"train={len(runner.data.train_texts)} val={len(runner.data.val_texts)} test={len(runner.data.test_texts)}"
+            )
+            print(
+                "val counts:",
+                {
+                    "normal": int(np.sum(runner.val_is_normal)),
+                    "malicious": int(np.sum(runner.val_y)),
+                },
+            )
+            print(
+                "test counts:",
+                {
+                    "normal": int(np.sum(runner.test_is_normal)),
+                    "borderline": int(np.sum(runner.test_is_borderline)),
+                    "malicious": int(np.sum(runner.test_is_malicious)),
+                },
+            )
 
-        if enable_rep_metric_sweep:
-            _evaluate_with_sweep(runner)
-        else:
-            for emb_spec in runner.cfg.embedding_models:
-                _print_header(f"Embedding: {emb_spec.name} ({emb_spec.model_id}) [{dataset_name}]")
-                X_train, _ = runner._embed(emb_spec, runner.data.train_texts)
-                X_val, _ = runner._embed(emb_spec, runner.data.val_texts)
-                X_test, _ = runner._embed(emb_spec, runner.data.test_texts)
-
-                if runner.cfg.enable_unsupervised and runner.cfg.unsupervised_detectors:
-                    print("\n[unsupervised]")
-                    for spec in runner.cfg.unsupervised_detectors:
-                        tuned_spec, best_metric, tried = runner._maybe_random_search_unsup(
-                            spec, X_train, X_val
+            if enable_rep_metric_sweep:
+                _evaluate_with_sweep(runner, cache)
+            else:
+                for emb_spec in runner.cfg.embedding_models:
+                    _print_header(f"Embedding: {emb_spec.name} ({emb_spec.model_id}) [{dataset_name}]")
+                    embedder = build_embedder(emb_spec)
+                    try:
+                        X_train, _ = _embed_with_cache(
+                            emb_spec, runner.data.train_texts, cache, embedder=embedder
                         )
-                        if tried > 1:
-                            metric_disp = f"{best_metric:.4f}" if best_metric is not None else "n/a"
-                            tuned_name = tuned_spec.get("name") or tuned_spec.get("type", "<unnamed>")
-                            print(
-                                f"[hypothesis] tuned unsup {tuned_name} trials={tried} metric={metric_disp}"
-                            )
-                        det = build_detector(tuned_spec)
-                        det.fit(X_train)
-                        scores_test = det.score(X_test)
-                        _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
-
-                if runner.cfg.enable_supervised and runner.cfg.supervised_detectors:
-                    print("\n[supervised]")
-                    for spec in runner.cfg.supervised_detectors:
-                        tuned_spec, best_metric, tried = runner._maybe_random_search_sup(
-                            spec,
-                            X_val[runner.sup_fit_idx],
-                            runner.val_y[runner.sup_fit_idx],
-                            X_val[runner.sup_cal_idx],
-                            runner.val_y[runner.sup_cal_idx],
+                        X_val, _ = _embed_with_cache(
+                            emb_spec, runner.data.val_texts, cache, embedder=embedder
                         )
-                        if tried > 1:
-                            metric_disp = f"{best_metric:.4f}" if best_metric is not None else "n/a"
-                            tuned_name = tuned_spec.get("name") or tuned_spec.get("type", "<unnamed>")
-                            print(
-                                f"[hypothesis] tuned sup {tuned_name} trials={tried} metric={metric_disp}"
+                        X_test, _ = _embed_with_cache(
+                            emb_spec, runner.data.test_texts, cache, embedder=embedder
+                        )
+                    finally:
+                        embedder.close()
+
+                    if runner.cfg.enable_unsupervised and runner.cfg.unsupervised_detectors:
+                        print("\n[unsupervised]")
+                        for spec in runner.cfg.unsupervised_detectors:
+                            tuned_spec, best_metric, tried = runner._maybe_random_search_unsup(
+                                spec, X_train, X_val
                             )
-                        det = build_detector(tuned_spec)
-                        det.fit(X_val[runner.sup_fit_idx], runner.val_y[runner.sup_fit_idx])
-                        scores_test = det.score(X_test)
-                        _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
+                            if tried > 1:
+                                metric_disp = f"{best_metric:.4f}" if best_metric is not None else "n/a"
+                                tuned_name = tuned_spec.get("name") or tuned_spec.get("type", "<unnamed>")
+                                print(
+                                    f"[hypothesis] tuned unsup {tuned_name} trials={tried} metric={metric_disp}"
+                                )
+                            det = build_detector(tuned_spec)
+                            det.fit(X_train)
+                            scores_test = det.score(X_test)
+                            _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
+
+                    if runner.cfg.enable_supervised and runner.cfg.supervised_detectors:
+                        print("\n[supervised]")
+                        for spec in runner.cfg.supervised_detectors:
+                            tuned_spec, best_metric, tried = runner._maybe_random_search_sup(
+                                spec,
+                                X_val[runner.sup_fit_idx],
+                                runner.val_y[runner.sup_fit_idx],
+                                X_val[runner.sup_cal_idx],
+                                runner.val_y[runner.sup_cal_idx],
+                            )
+                            if tried > 1:
+                                metric_disp = f"{best_metric:.4f}" if best_metric is not None else "n/a"
+                                tuned_name = tuned_spec.get("name") or tuned_spec.get("type", "<unnamed>")
+                                print(
+                                    f"[hypothesis] tuned sup {tuned_name} trials={tried} metric={metric_disp}"
+                                )
+                            det = build_detector(tuned_spec)
+                            det.fit(X_val[runner.sup_fit_idx], runner.val_y[runner.sup_fit_idx])
+                            scores_test = det.score(X_test)
+                            _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
+    finally:
+        cache.flush_all()
 
 
 def _env_or_default(env_key: str, default: str) -> str:
