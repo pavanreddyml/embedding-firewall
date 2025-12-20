@@ -36,7 +36,7 @@ RUN_ID = "demo_run"
 RUN_MODEL_IDS: list[str] = []
 
 CHEAP_EMBED_KINDS = {"st", "ollama"}
-CHEAP_RANDOM_SEARCH_TRIALS = 100
+CHEAP_RANDOM_SEARCH_TRIALS = 12
 
 LOCAL_BASE_DIR = "."
 COLAB_BASE_DIR = "/content/drive/MyDrive/research/embfirewall"  # <-- change to your folder on Drive

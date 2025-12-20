@@ -344,186 +344,52 @@ class ExperimentRunner:
         t = str(spec.get("type", "")).lower()
         return t in {"autoencoder", "vae", "gan"}
 
-    def _param_distributions(self, base: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        """Return (defaults, distributions) for RandomizedSearchCV."""
+    def _randomize_spec(self, base: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate a single random variation of a detector spec."""
 
-        defaults: Dict[str, Any] = {}
-        dists: Dict[str, Any] = {}
-
-        t = str(base.get("type", "")).lower()
-
-        def _def(key: str, value: Any) -> None:
-            defaults[key] = base.get(key, value)
+        spec = dict(base)
+        t = str(spec.get("type", "")).lower()
+        name_root = spec.get("name", t)
+        spec["name"] = f"{name_root}_rs{self.rng.randint(1_000_000)}"
 
         if t == "logreg":
-            _def("C", 1.0)
-            dists["C"] = loguniform(0.01, 15.0)
-            _def("class_weight", None)
-            dists["class_weight"] = [None, "balanced"]
+            spec["C"] = float(np.exp(self.rng.uniform(np.log(0.01), np.log(15.0))))
+            spec["class_weight"] = self.rng.choice([None, "balanced"])
         elif t == "linsvm":
-            _def("C", 1.0)
-            dists["C"] = loguniform(0.01, 8.0)
-            _def("class_weight", None)
-            dists["class_weight"] = [None, "balanced"]
-            _def("calibration_cv", 5)
-            dists["calibration_cv"] = [3, 5, 10]
-            _def("calibration_method", "sigmoid")
-            dists["calibration_method"] = ["sigmoid", "isotonic"]
+            spec["C"] = float(np.exp(self.rng.uniform(np.log(0.01), np.log(8.0))))
+            spec["class_weight"] = self.rng.choice([None, "balanced"])
+            spec["calibration_cv"] = int(self.rng.choice([3, 5, 10]))
+            spec["calibration_method"] = str(self.rng.choice(["sigmoid", "isotonic"]))
         elif t == "hgbt":
-            _def("learning_rate", 0.05)
-            dists["learning_rate"] = uniform(0.02, 0.18)
-            _def("max_depth", 10)
-            dists["max_depth"] = randint(3, 14)
-            _def("max_iter", 400)
-            dists["max_iter"] = randint(150, 600)
-            _def("l2_regularization", 0.1)
-            dists["l2_regularization"] = loguniform(1e-4, 1.0)
+            spec["learning_rate"] = float(self.rng.uniform(0.02, 0.2))
+            spec["max_depth"] = int(self.rng.randint(3, 14))
+            spec["max_iter"] = int(self.rng.randint(150, 600))
+            spec["l2_regularization"] = float(np.exp(self.rng.uniform(np.log(1e-4), np.log(1.0))))
         elif t == "knn":
-            _def("k", 5)
-            dists["k"] = randint(3, 50)
+            spec["k"] = int(self.rng.randint(3, 50))
         elif t == "ocsvm":
-            _def("nu", 0.05)
-            dists["nu"] = uniform(0.01, 0.19)
-            _def("kernel", "rbf")
-            dists["kernel"] = ["rbf", "sigmoid"]
-            _def("gamma", "scale")
-            dists["gamma"] = ["scale", "auto"]
+            spec["nu"] = float(self.rng.uniform(0.01, 0.2))
+            spec["kernel"] = str(self.rng.choice(["rbf", "sigmoid"]))
+            spec["gamma"] = str(self.rng.choice(["scale", "auto"]))
         elif t == "iforest":
-            _def("n_estimators", 400)
-            dists["n_estimators"] = randint(100, 500)
-            _def("contamination", 0.05)
-            dists["contamination"] = uniform(0.01, 0.19)
-            _def("max_samples", "auto")
-            dists["max_samples"] = ["auto", 0.5, 0.8, 1.0]
-            _def("random_state", self.cfg.random_search_seed)
+            spec["n_estimators"] = int(self.rng.randint(100, 500))
+            spec["contamination"] = float(self.rng.uniform(0.01, 0.2))
+            spec["max_samples"] = self.rng.choice(["auto", 0.5, 0.8, 1.0])
+            spec.setdefault("random_state", self.cfg.random_search_seed)
         elif t == "mahalanobis":
+            # no tunable hyperparams; return unchanged but keep unique name
             pass
         elif t == "pca":
-            _def("n_components", 64)
-            dists["n_components"] = randint(8, 256)
-            _def("whiten", False)
-            dists["whiten"] = [True, False]
+            spec["n_components"] = int(self.rng.randint(8, 256))
+            spec["whiten"] = bool(self.rng.choice([True, False]))
         elif t in {"gmm", "gmm_energy", "gaussian_mixture"}:
-            _def("n_components", 3)
-            dists["n_components"] = randint(2, 24)
-            _def("covariance_type", "full")
-            dists["covariance_type"] = ["full", "diag"]
-            _def("reg_covar", 1e-3)
-            dists["reg_covar"] = loguniform(1e-5, 1e-2)
-            _def("max_iter", 300)
-            dists["max_iter"] = randint(150, 450)
-            _def("random_state", self.cfg.random_search_seed)
+            spec["n_components"] = int(self.rng.randint(2, 24))
+            spec["covariance_type"] = str(self.rng.choice(["full", "diag"]))
+            spec["reg_covar"] = float(np.exp(self.rng.uniform(np.log(1e-5), np.log(1e-2))))
+            spec["max_iter"] = int(self.rng.randint(150, 450))
+            spec.setdefault("random_state", self.cfg.random_search_seed)
 
-        return defaults, dists
-
-    def _make_cv_split(self, n_train: int, n_val: int) -> PredefinedSplit:
-        folds = np.concatenate([np.full(n_train, -1, dtype=int), np.zeros(n_val, dtype=int)])
-        return PredefinedSplit(folds)
-
-    def _build_search_estimator(
-        self,
-        base_spec: Dict[str, Any],
-        param_defaults: Dict[str, Any],
-        *,
-        supervised: bool,
-    ):
-        self_outer = self
-
-        class _DetectorEstimator:
-            def __init__(self, **params: Any):
-                self.params = params
-                self._detector = None
-
-            def get_params(self, deep: bool = True) -> Dict[str, Any]:
-                return dict(self.params)
-
-            def set_params(self, **params: Any):
-                for k, v in params.items():
-                    self.params[k] = v
-                return self
-
-            def fit(self, X, y=None):
-                spec = dict(base_spec)
-                spec.update(self.params)
-                spec.setdefault("random_state", self.params.get("random_state", self.params.get("seed")))
-                self._detector = build_detector(spec)
-                if supervised:
-                    self._detector.fit(X, y)
-                else:
-                    self._detector.fit(X)
-                return self
-
-            def score(self, X, y=None):
-                if self._detector is None:
-                    raise RuntimeError("Detector not fit")
-                scores = self._detector.score(X)
-                if y is None:
-                    return float("-inf")
-                return float(self_outer._metric_value(np.asarray(y, dtype=np.int32), np.asarray(scores)))
-
-        return _DetectorEstimator(**param_defaults)
-
-    def _run_random_search(
-        self,
-        base_spec: Dict[str, Any],
-        X_train: np.ndarray,
-        X_val: np.ndarray,
-        y_val: np.ndarray,
-        *,
-        supervised: bool,
-        y_train: Optional[np.ndarray] = None,
-    ) -> Tuple[Dict[str, Any], Optional[float], int]:
-        if self.cfg.random_search_trials <= 0 or self._is_expensive_detector(base_spec):
-            return base_spec, None, 0
-
-        defaults, dists = self._param_distributions(base_spec)
-        tried = 0
-
-        det = build_detector(base_spec)
-        if supervised:
-            det.fit(X_train, y_train)
-        else:
-            det.fit(X_train)
-        base_scores_val = det.score(X_val)
-        best_metric = self._metric_value(y_val, base_scores_val)
-        best_spec = dict(base_spec)
-        tried += 1
-
-        if not dists:
-            return best_spec, best_metric, tried
-
-        estimator = self._build_search_estimator(base_spec, defaults, supervised=supervised)
-        X_combined = np.concatenate([X_train, X_val])
-        y_combined = np.concatenate([
-            (np.asarray(y_train, dtype=np.int32) if supervised and y_train is not None else np.zeros(X_train.shape[0], dtype=np.int32)),
-            np.asarray(y_val, dtype=np.int32),
-        ])
-        cv = self._make_cv_split(X_train.shape[0], X_val.shape[0])
-
-        try:
-            search = RandomizedSearchCV(
-                estimator,
-                dists,
-                n_iter=self.cfg.random_search_trials,
-                random_state=self.cfg.random_search_seed,
-                scoring=None,
-                cv=cv,
-                n_jobs=1,
-                refit=False,
-            )
-            search.fit(X_combined, y_combined)
-            tried += len(search.cv_results_.get("params", []))
-
-            if search.best_params_:
-                search_metric = float(search.best_score_)
-                if search_metric > best_metric:
-                    best_spec = dict(base_spec)
-                    best_spec.update(search.best_params_)
-                    best_metric = search_metric
-        except Exception as exc:
-            print(f"[runner] RandomizedSearchCV failed for {base_spec}: {exc}")
-
-        return best_spec, best_metric, tried
+        return spec
 
     def _maybe_random_search_unsup(
         self,
@@ -531,7 +397,32 @@ class ExperimentRunner:
         X_train: np.ndarray,
         X_val: np.ndarray,
     ) -> Tuple[Dict[str, Any], Optional[float], int]:
-        return self._run_random_search(base_spec, X_train, X_val, self.val_y, supervised=False)
+        if self.cfg.random_search_trials <= 0 or self._is_expensive_detector(base_spec):
+            return base_spec, None, 0
+
+        best_spec = dict(base_spec)
+        det = build_detector(best_spec)
+        det.fit(X_train)
+        base_scores_val = det.score(X_val)
+        best_metric = self._metric_value(self.val_y, base_scores_val)
+        tried = 1
+
+        for _ in range(self.cfg.random_search_trials):
+            candidate = self._randomize_spec(base_spec)
+            try:
+                det_c = build_detector(candidate)
+                det_c.fit(X_train)
+                scores_val = det_c.score(X_val)
+                metric = self._metric_value(self.val_y, scores_val)
+                tried += 1
+                if metric > best_metric:
+                    best_metric = metric
+                    best_spec = candidate
+            except Exception as exc:
+                print(f"[runner] random search unsup failed for {candidate}: {exc}")
+                continue
+
+        return best_spec, best_metric, tried
 
     def _maybe_random_search_sup(
         self,
@@ -541,7 +432,32 @@ class ExperimentRunner:
         X_val: np.ndarray,
         y_val: np.ndarray,
     ) -> Tuple[Dict[str, Any], Optional[float], int]:
-        return self._run_random_search(base_spec, X_fit, X_val, y_val, supervised=True, y_train=y_fit)
+        if self.cfg.random_search_trials <= 0 or self._is_expensive_detector(base_spec):
+            return base_spec, None, 0
+
+        best_spec = dict(base_spec)
+        det = build_detector(best_spec)
+        det.fit(X_fit, y_fit)
+        base_scores_val = det.score(X_val)
+        best_metric = self._metric_value(y_val, base_scores_val)
+        tried = 1
+
+        for _ in range(self.cfg.random_search_trials):
+            candidate = self._randomize_spec(base_spec)
+            try:
+                det_c = build_detector(candidate)
+                det_c.fit(X_fit, y_fit)
+                scores_val = det_c.score(X_val)
+                metric = self._metric_value(y_val, scores_val)
+                tried += 1
+                if metric > best_metric:
+                    best_metric = metric
+                    best_spec = candidate
+            except Exception as exc:
+                print(f"[runner] random search sup failed for {candidate}: {exc}")
+                continue
+
+        return best_spec, best_metric, tried
 
     def _embed(self, emb_spec: EmbeddingSpec, texts: List[str]) -> Tuple[np.ndarray, float]:
         t0_total = time.time()
