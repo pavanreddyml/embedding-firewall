@@ -1,5 +1,6 @@
 # file: embfirewall/detectors/__init__.py
 from .base import Detector
+from .ensemble import EnsembleDetector
 from .factory import build_detector
 from .keywords import DEFAULT_PATTERNS, KeywordBaseline
 from .supervised import GradientBoostingDetector, LinearSVMDetector, LogisticRegressionDetector
@@ -14,10 +15,12 @@ from .unsupervised import (
     OneClassSVMDetector,
     PCAReconstructionError,
     VariationalAutoencoderDetector,
+    GaussianMixtureEnergy,
 )
 
 __all__ = [
     "Detector",
+    "EnsembleDetector",
     "build_detector",
     "KeywordBaseline",
     "DEFAULT_PATTERNS",
@@ -31,6 +34,7 @@ __all__ = [
     "MahalanobisDistance",
     "LocalOutlierFactorDetector",
     "PCAReconstructionError",
+    "GaussianMixtureEnergy",
     "AutoencoderDetector",
     "VariationalAutoencoderDetector",
     "GANDiscriminatorDetector",

@@ -95,18 +95,71 @@ class RunConfig:
         if self.unsupervised_detectors is None:
             self.unsupervised_detectors = [
                 {"type": "centroid", "name": "centroid"},
-                {"type": "knn", "k": 10, "name": "knn10"},
-                {"type": "ocsvm", "nu": 0.1, "kernel": "rbf", "gamma": "scale", "name": "ocsvm"},
-                {"type": "iforest", "n_estimators": 200, "name": "iforest"},
+                {"type": "knn", "k": 5, "name": "knn05"},
+                {"type": "knn", "k": 25, "name": "knn25"},
+                {"type": "ocsvm", "nu": 0.05, "kernel": "rbf", "gamma": "scale", "name": "ocsvm_rbf"},
+                {"type": "ocsvm", "nu": 0.05, "kernel": "sigmoid", "gamma": "scale", "name": "ocsvm_sig"},
+                {"type": "iforest", "n_estimators": 400, "max_samples": "auto", "name": "iforest400"},
                 # extras (strong baselines)
                 {"type": "mahalanobis", "name": "mahal"},
                 {"type": "lof", "n_neighbors": 35, "name": "lof35"},
+                {"type": "lof", "n_neighbors": 60, "name": "lof60"},
                 {"type": "pca", "n_components": 64, "name": "pca64"},
+                {"type": "pca", "n_components": 128, "name": "pca128"},
+                {"type": "gmm_energy", "n_components": 3, "covariance_type": "full", "name": "gmm3_full"},
+                {"type": "gmm_energy", "n_components": 6, "covariance_type": "diag", "reg_covar": 1e-3, "name": "gmm6_diag"},
+                {
+                    "type": "ensemble",
+                    "name": "ens_mean_knn_iforest_mahal",
+                    "aggregation": "mean",
+                    "members": [
+                        {"type": "knn", "k": 25, "name": "knn25"},
+                        {"type": "iforest", "n_estimators": 400, "max_samples": "auto", "name": "iforest400"},
+                        {"type": "mahalanobis", "name": "mahal"},
+                    ],
+                },
+                {
+                    "type": "ensemble",
+                    "name": "ens_median_ocsvm_lof_pca",
+                    "aggregation": "median",
+                    "members": [
+                        {"type": "ocsvm", "nu": 0.05, "kernel": "rbf", "gamma": "scale", "name": "ocsvm_rbf"},
+                        {"type": "lof", "n_neighbors": 60, "name": "lof60"},
+                        {"type": "pca", "n_components": 128, "name": "pca128"},
+                    ],
+                },
+                {
+                    "type": "ensemble",
+                    "name": "ens_max_gmm_pca_knn",
+                    "aggregation": "max",
+                    "members": [
+                        {"type": "gmm_energy", "n_components": 6, "covariance_type": "diag", "reg_covar": 1e-3, "name": "gmm6_diag"},
+                        {"type": "pca", "n_components": 64, "name": "pca64"},
+                        {"type": "knn", "k": 5, "name": "knn05"},
+                    ],
+                },
             ]
 
         if self.supervised_detectors is None:
             self.supervised_detectors = [
                 {"type": "logreg", "C": 1.0, "name": "logreg"},
+                {"type": "logreg", "C": 0.35, "class_weight": "balanced", "name": "logreg_bal"},
+                {
+                    "type": "linsvm",
+                    "C": 0.75,
+                    "class_weight": "balanced",
+                    "calibration_cv": 5,
+                    "calibration_method": "sigmoid",
+                    "name": "linsvm_balanced",
+                },
+                {
+                    "type": "hgbt",
+                    "learning_rate": 0.05,
+                    "max_depth": 10,
+                    "max_iter": 400,
+                    "l2_regularization": 0.1,
+                    "name": "hgbt_tuned",
+                },
             ]
 
         if self.unsupervised_positive_labels is None:

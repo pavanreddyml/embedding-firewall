@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Dict, Union
 
 from .base import Detector
+from .ensemble import EnsembleDetector
 from .supervised import GradientBoostingDetector, LinearSVMDetector, LogisticRegressionDetector
 from .unsupervised import (
     AutoencoderDetector,
@@ -16,6 +17,7 @@ from .unsupervised import (
     OneClassSVMDetector,
     PCAReconstructionError,
     VariationalAutoencoderDetector,
+    GaussianMixtureEnergy,
 )
 
 DetectorSpec = Union[str, Dict[str, Any]]
@@ -69,6 +71,9 @@ def build_detector(spec: DetectorSpec) -> Detector:
     if t in ("pca", "pca_recon", "pca_reconstruction"):
         return PCAReconstructionError(**cfg)
 
+    if t in ("gmm", "gmm_energy", "gaussian_mixture"):
+        return GaussianMixtureEnergy(**cfg)
+
     if t in ("ae", "autoencoder"):
         return AutoencoderDetector(**cfg)
 
@@ -86,5 +91,12 @@ def build_detector(spec: DetectorSpec) -> Detector:
 
     if t in ("hgbt", "histgradientboosting", "hist_gbt", "gradient_boosting"):
         return GradientBoostingDetector(**cfg)
+
+    if t in ("ensemble", "blend", "aggregate"):
+        members = cfg.pop("members", None)
+        if not members:
+            raise ValueError("Ensemble detector requires a non-empty 'members' list")
+        aggregation = cfg.pop("aggregation", "mean")
+        return EnsembleDetector(detectors=[build_detector(s) for s in members], aggregation=aggregation, **cfg)
 
     raise ValueError(f"Unknown detector type: {t}")
