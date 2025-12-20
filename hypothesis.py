@@ -34,6 +34,8 @@ import numpy as np
 from embfirewall.detectors.factory import build_detector
 from embfirewall.runner import DatasetSlices, ExperimentRunner, RunConfig
 from run_eval import (
+    CHEAP_EMBED_KINDS,
+    CHEAP_RANDOM_SEARCH_TRIALS,
     DATA_DIR,
     EVAL_CONFIG_PATH,
     _list_dataset_dirs,
@@ -162,6 +164,13 @@ def _build_runner(eval_cfg: dict, data_dir: str, run_dir: str, dataset_name: str
     sup_list = det_cfg.get("supervised")
 
     embeddings = _parse_embeddings(eval_cfg)
+    enable_random_search = any(e.kind in CHEAP_EMBED_KINDS for e in embeddings)
+    random_search_trials = CHEAP_RANDOM_SEARCH_TRIALS if enable_random_search else 0
+    if random_search_trials > 0:
+        print(
+            "[hypothesis] enabling random search for cheap embedding kinds:",
+            {e.name: e.kind for e in embeddings if e.kind in CHEAP_EMBED_KINDS},
+        )
 
     cfg = RunConfig(
         run_dir=run_dir,
@@ -178,6 +187,7 @@ def _build_runner(eval_cfg: dict, data_dir: str, run_dir: str, dataset_name: str
         keyword_patterns=(list(keyword_patterns) if isinstance(keyword_patterns, list) else None),
         dataset_name=dataset_name,
         unsupervised_positive_labels=(meta["malicious_label"], meta["borderline_label"]),
+        random_search_trials=random_search_trials,
     )
 
     runner = ExperimentRunner(cfg, data)
@@ -475,7 +485,15 @@ def run_diagnostic(eval_config: str, data_dir: str, run_dir: str, *, enable_rep_
                 if runner.cfg.enable_unsupervised and runner.cfg.unsupervised_detectors:
                     print("\n[unsupervised]")
                     for spec in runner.cfg.unsupervised_detectors:
-                        det = build_detector(spec)
+                        tuned_spec, best_metric, tried = runner._maybe_random_search_unsup(
+                            spec, X_train, X_val
+                        )
+                        if tried > 1:
+                            metric_disp = f"{best_metric:.4f}" if best_metric is not None else "n/a"
+                            print(
+                                f"[hypothesis] tuned unsup {tuned_spec['name']} trials={tried} metric={metric_disp}"
+                            )
+                        det = build_detector(tuned_spec)
                         det.fit(X_train)
                         scores_test = det.score(X_test)
                         _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
@@ -483,7 +501,19 @@ def run_diagnostic(eval_config: str, data_dir: str, run_dir: str, *, enable_rep_
                 if runner.cfg.enable_supervised and runner.cfg.supervised_detectors:
                     print("\n[supervised]")
                     for spec in runner.cfg.supervised_detectors:
-                        det = build_detector(spec)
+                        tuned_spec, best_metric, tried = runner._maybe_random_search_sup(
+                            spec,
+                            X_val[runner.sup_fit_idx],
+                            runner.val_y[runner.sup_fit_idx],
+                            X_val[runner.sup_cal_idx],
+                            runner.val_y[runner.sup_cal_idx],
+                        )
+                        if tried > 1:
+                            metric_disp = f"{best_metric:.4f}" if best_metric is not None else "n/a"
+                            print(
+                                f"[hypothesis] tuned sup {tuned_spec['name']} trials={tried} metric={metric_disp}"
+                            )
+                        det = build_detector(tuned_spec)
                         det.fit(X_val[runner.sup_fit_idx], runner.val_y[runner.sup_fit_idx])
                         scores_test = det.score(X_test)
                         _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
