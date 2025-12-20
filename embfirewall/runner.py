@@ -341,7 +341,8 @@ class ExperimentRunner:
     @staticmethod
     def _is_expensive_detector(spec: Dict[str, Any]) -> bool:
         t = str(spec.get("type", "")).lower()
-        return t in {"autoencoder", "vae", "gan"}
+        # Avoid random search for slower detectors that are expensive to fit.
+        return t in {"autoencoder", "vae", "gan", "linsvm", "ocsvm", "iforest", "lof"}
 
     def _random_search_trials_for_spec(self, spec: Dict[str, Any]) -> int:
         """Cap random search trials for slower detectors."""
@@ -351,9 +352,8 @@ class ExperimentRunner:
             return 0
 
         det_type = str(spec.get("type", "")).lower()
-        slow_types = {"linsvm", "ocsvm", "iforest", "lof"}
-        if det_type in slow_types:
-            return min(base_trials, 8)
+        if self._is_expensive_detector(spec):
+            return 0
 
         return base_trials
 
