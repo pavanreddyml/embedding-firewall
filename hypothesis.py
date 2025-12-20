@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Iterable, List, Sequence, Tuple
 
 import numpy as np
 
@@ -222,7 +222,212 @@ def _summarize_detector(
     print(f"    malicious  mean={stats_mal['mean']:.4f} p95={stats_mal['p95']:.4f} p99={stats_mal['p99']:.4f}")
 
 
-def run_diagnostic(eval_config: str, data_dir: str, run_dir: str) -> None:
+def _normalize(
+    *, X_train: np.ndarray, X_val: np.ndarray, X_test: np.ndarray, eps: float = 1e-6
+) -> Dict[str, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Return multiple preprocessing modes using train-only statistics."""
+
+    modes: Dict[str, Tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+    modes["raw"] = (X_train, X_val, X_test)
+
+    def _l2(x: np.ndarray) -> np.ndarray:
+        denom = np.maximum(np.linalg.norm(x, axis=1, keepdims=True), eps)
+        return x / denom
+
+    modes["l2"] = (_l2(X_train), _l2(X_val), _l2(X_test))
+
+    mean = np.mean(X_train, axis=0)
+    std = np.std(X_train, axis=0)
+    adj_std = np.maximum(std, eps)
+
+    def _standardize(x: np.ndarray, *, center_only: bool = False) -> np.ndarray:
+        centered = x - mean[None, :]
+        return centered if center_only else centered / adj_std[None, :]
+
+    modes["center"] = (_standardize(X_train, center_only=True), _standardize(X_val, center_only=True), _standardize(X_test, center_only=True))
+    modes["standardize"] = (_standardize(X_train), _standardize(X_val), _standardize(X_test))
+
+    return modes
+
+
+def _detector_type_name(spec: str | dict) -> str:
+    t = spec if isinstance(spec, str) else spec.get("type", "")
+    t = str(t).lower().strip()
+    if t in ("centroid", "mean", "l2"):
+        return "centroid"
+    if t == "knn":
+        return "knn"
+    if t in ("ocsvm", "oneclasssvm", "one_class_svm"):
+        return "ocsvm"
+    if t in ("iforest", "isolationforest", "isolation_forest"):
+        return "iforest"
+    if t in ("mahal", "mahalanobis"):
+        return "mahalanobis"
+    if t in ("lof", "localoutlierfactor", "local_outlier_factor"):
+        return "lof"
+    if t in ("pca", "pca_recon", "pca_reconstruction"):
+        return "pca"
+    if t in ("gmm", "gmm_energy", "gaussian_mixture"):
+        return "gmm"
+    if t in ("ae", "autoencoder"):
+        return "autoencoder"
+    if t in ("vae", "variational_autoencoder"):
+        return "vae"
+    if t in ("gan", "gan_detector", "gan_disc", "gan_discriminator"):
+        return "gan"
+    if t in ("logreg", "logisticregression", "logistic_regression"):
+        return "logreg"
+    if t in ("linsvm", "linear_svm", "linsvm_calibrated"):
+        return "linsvm"
+    if t in ("hgbt", "histgradientboosting", "hist_gbt", "gradient_boosting"):
+        return "hgbt"
+    if t in ("ensemble", "blend", "aggregate"):
+        return "ensemble"
+    return t
+
+
+def _metric_grid_for_detector(det_type: str) -> Sequence[Tuple[str, str]]:
+    metric_grid: Sequence[Tuple[str, str]]
+    if det_type in {"centroid", "knn"}:
+        metric_grid = (
+            ("l2", "euclidean"),
+            ("cos", "cosine"),
+            ("dot", "dot"),
+            ("l1", "manhattan"),
+        )
+    elif det_type == "lof":
+        metric_grid = (
+            ("l2", "euclidean"),
+            ("cos", "cosine"),
+            ("l1", "manhattan"),
+        )
+    elif det_type == "mahalanobis":
+        metric_grid = (("mahal", "mahalanobis"),)
+    else:
+        metric_grid = (("default", "default"),)
+    return metric_grid
+
+
+def _normalize_detector_spec(spec: str | dict) -> dict:
+    if isinstance(spec, str):
+        return {"type": spec, "name": spec}
+    cfg = dict(spec)
+    cfg.setdefault("name", cfg.get("type", "detector"))
+    return cfg
+
+
+def _collect_summary(det_name: str, scores_test: np.ndarray, runner: ExperimentRunner) -> Dict[str, object]:
+    y_mal_only = runner.test_y
+    y_mal_or_bl = np.where(runner.test_is_malicious | runner.test_is_borderline, 1, 0)
+    y_normal = np.where(runner.test_is_normal, 1, 0)
+    scores_normal = -scores_test
+
+    m1, m2 = _metrics_pair(scores=scores_test, y_malicious_only=y_mal_only, y_mal_or_borderline=y_mal_or_bl)
+    m_norm = ExperimentRunner._metrics_summary(y_normal, scores_normal)
+
+    stats_norm = _group_stats(scores_test, runner.test_is_normal)
+    stats_bl = _group_stats(scores_test, runner.test_is_borderline)
+    stats_mal = _group_stats(scores_test, runner.test_is_malicious)
+
+    return {
+        "name": det_name,
+        "auroc_mal": m1.get("auroc"),
+        "auroc_bl": m2.get("auroc"),
+        "auprc_mal": m1.get("auprc"),
+        "auprc_bl": m2.get("auprc"),
+        "auroc_norm": m_norm.get("auroc"),
+        "stats_norm": stats_norm,
+        "stats_bl": stats_bl,
+        "stats_mal": stats_mal,
+    }
+
+
+def _fmt_score(val: object) -> str:
+    if val is None:
+        return "None"
+    try:
+        return f"{float(val):.4f}"
+    except Exception:
+        return str(val)
+
+
+def _print_block(title: str, results: Iterable[Dict[str, object]]) -> None:
+    print(f"\n{title}")
+    for res in sorted(results, key=lambda r: str(r.get("name", ""))):
+        norm = res.get("stats_norm", {})
+        bl = res.get("stats_bl", {})
+        mal = res.get("stats_mal", {})
+        print(f"  {res.get('name', '')}")
+        print(
+            "    AUROC mo+="
+            f"{_fmt_score(res.get('auroc_mal'))} | AUROC mb+={_fmt_score(res.get('auroc_bl'))} | "
+            f"AUPRC mo+={_fmt_score(res.get('auprc_mal'))} | AUPRC mb+={_fmt_score(res.get('auprc_bl'))} | "
+            f"AUROC norm+={_fmt_score(res.get('auroc_norm'))}"
+        )
+        print(
+            "    normal     "
+            f"mean={norm.get('mean', float('nan')):.4f} p95={norm.get('p95', float('nan')):.4f} "
+            f"p99={norm.get('p99', float('nan')):.4f}"
+        )
+        print(
+            "    borderline "
+            f"mean={bl.get('mean', float('nan')):.4f} p95={bl.get('p95', float('nan')):.4f} "
+            f"p99={bl.get('p99', float('nan')):.4f}"
+        )
+        print(
+            "    malicious  "
+            f"mean={mal.get('mean', float('nan')):.4f} p95={mal.get('p95', float('nan')):.4f} "
+            f"p99={mal.get('p99', float('nan')):.4f}"
+        )
+
+
+def _evaluate_with_sweep(runner: ExperimentRunner) -> None:
+    for emb_spec in runner.cfg.embedding_models:
+        _print_header(f"Embedding: {emb_spec.name} ({emb_spec.model_id}) [{runner.cfg.dataset_name}]")
+        X_train_raw, _ = runner._embed(emb_spec, runner.data.train_texts)
+        X_val_raw, _ = runner._embed(emb_spec, runner.data.val_texts)
+        X_test_raw, _ = runner._embed(emb_spec, runner.data.test_texts)
+
+        preproc_modes = _normalize(X_train=X_train_raw, X_val=X_val_raw, X_test=X_test_raw)
+
+        for prep_name, (X_train, X_val, X_test) in preproc_modes.items():
+            print(f"\n--- Preprocessing: {prep_name} ---")
+            unsup_results: List[Dict[str, object]] = []
+            sup_results: List[Dict[str, object]] = []
+
+            if runner.cfg.enable_unsupervised and runner.cfg.unsupervised_detectors:
+                for spec in runner.cfg.unsupervised_detectors:
+                    det_type = _detector_type_name(spec)
+                    for metric_tag, metric_value in _metric_grid_for_detector(det_type):
+                        if det_type == "mahalanobis" and prep_name == "l2":
+                            # Mahalanobis should stay in raw/standardized spaces unless explicitly ablated
+                            continue
+                        cfg = _normalize_detector_spec(spec)
+                        display_metric = metric_tag
+                        if det_type in {"centroid", "knn", "lof"}:
+                            cfg["metric"] = metric_value
+                        disp_name = f"{cfg['name']}[{prep_name}|{display_metric}]"
+                        det = build_detector(cfg)
+                        det.fit(X_train)
+                        scores_test = det.score(X_test)
+                        unsup_results.append(_collect_summary(disp_name, scores_test, runner))
+
+            if runner.cfg.enable_supervised and runner.cfg.supervised_detectors:
+                for spec in runner.cfg.supervised_detectors:
+                    cfg = _normalize_detector_spec(spec)
+                    det = build_detector(cfg)
+                    det.fit(X_val[runner.sup_fit_idx], runner.val_y[runner.sup_fit_idx])
+                    scores_test = det.score(X_test)
+                    disp_name = f"{cfg['name']}[{prep_name}|default]"
+                    sup_results.append(_collect_summary(disp_name, scores_test, runner))
+
+            if unsup_results:
+                _print_block("[unsupervised]", unsup_results)
+            if sup_results:
+                _print_block("[supervised]", sup_results)
+
+
+def run_diagnostic(eval_config: str, data_dir: str, run_dir: str, *, enable_rep_metric_sweep: bool = False) -> None:
     eval_cfg = _load_eval_config(eval_config)
 
     labels_cfg = eval_cfg.get("labels") or {}
@@ -258,27 +463,30 @@ def run_diagnostic(eval_config: str, data_dir: str, run_dir: str) -> None:
             },
         )
 
-        for emb_spec in runner.cfg.embedding_models:
-            _print_header(f"Embedding: {emb_spec.name} ({emb_spec.model_id}) [{dataset_name}]")
-            X_train, _ = runner._embed(emb_spec, runner.data.train_texts)
-            X_val, _ = runner._embed(emb_spec, runner.data.val_texts)
-            X_test, _ = runner._embed(emb_spec, runner.data.test_texts)
+        if enable_rep_metric_sweep:
+            _evaluate_with_sweep(runner)
+        else:
+            for emb_spec in runner.cfg.embedding_models:
+                _print_header(f"Embedding: {emb_spec.name} ({emb_spec.model_id}) [{dataset_name}]")
+                X_train, _ = runner._embed(emb_spec, runner.data.train_texts)
+                X_val, _ = runner._embed(emb_spec, runner.data.val_texts)
+                X_test, _ = runner._embed(emb_spec, runner.data.test_texts)
 
-            if runner.cfg.enable_unsupervised and runner.cfg.unsupervised_detectors:
-                print("\n[unsupervised]")
-                for spec in runner.cfg.unsupervised_detectors:
-                    det = build_detector(spec)
-                    det.fit(X_train)
-                    scores_test = det.score(X_test)
-                    _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
+                if runner.cfg.enable_unsupervised and runner.cfg.unsupervised_detectors:
+                    print("\n[unsupervised]")
+                    for spec in runner.cfg.unsupervised_detectors:
+                        det = build_detector(spec)
+                        det.fit(X_train)
+                        scores_test = det.score(X_test)
+                        _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
 
-            if runner.cfg.enable_supervised and runner.cfg.supervised_detectors:
-                print("\n[supervised]")
-                for spec in runner.cfg.supervised_detectors:
-                    det = build_detector(spec)
-                    det.fit(X_val[runner.sup_fit_idx], runner.val_y[runner.sup_fit_idx])
-                    scores_test = det.score(X_test)
-                    _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
+                if runner.cfg.enable_supervised and runner.cfg.supervised_detectors:
+                    print("\n[supervised]")
+                    for spec in runner.cfg.supervised_detectors:
+                        det = build_detector(spec)
+                        det.fit(X_val[runner.sup_fit_idx], runner.val_y[runner.sup_fit_idx])
+                        scores_test = det.score(X_test)
+                        _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
 
 
 def _env_or_default(env_key: str, default: str) -> str:
@@ -286,8 +494,21 @@ def _env_or_default(env_key: str, default: str) -> str:
     return val if val else default
 
 
+def _env_flag(env_key: str, default: bool = False) -> bool:
+    val = os.environ.get(env_key)
+    if val is None:
+        return default
+    return str(val).lower() in {"1", "true", "yes", "on"}
+
+
 if __name__ == "__main__":
     eval_config = _env_or_default("HYPOTHESIS_EVAL_CONFIG", EVAL_CONFIG_PATH)
     data_dir = _env_or_default("HYPOTHESIS_DATA_DIR", DATA_DIR)
     run_dir = _env_or_default("HYPOTHESIS_RUN_DIR", str(Path("runs") / "hypothesis"))
-    run_diagnostic(eval_config=str(eval_config), data_dir=str(data_dir), run_dir=str(run_dir))
+    enable_sweep = _env_flag("HYPOTHESIS_REP_SWEEP", False)
+    run_diagnostic(
+        eval_config=str(eval_config),
+        data_dir=str(data_dir),
+        run_dir=str(run_dir),
+        enable_rep_metric_sweep=enable_sweep,
+    )
