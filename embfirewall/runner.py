@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+from scipy.stats import randint, uniform
 from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.model_selection import PredefinedSplit, RandomizedSearchCV
+from sklearn.utils.fixes import loguniform
 from tqdm import tqdm
 
 from .detectors import DEFAULT_PATTERNS, KeywordBaseline
