@@ -40,7 +40,7 @@ labels:
         name: beavertails_malicious_unsafe
         dataset: PKU-Alignment/BeaverTails
         subset: default
-        split: 30k_train
+        split: 330k_train
         streaming: true
         text_field: prompt
         filters:

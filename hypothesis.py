@@ -43,15 +43,18 @@ from run_eval import (
     EVAL_CONFIG_PATH,
     _list_dataset_dirs,
     _load_eval_config,
-    _parse_dataset_env,
     _load_test,
     _load_train_normal,
     _load_val,
     _parse_embeddings,
 )
 
+os.environ["HYPOTHESIS_DATASETS"] = ",".join(["jigsaw"])  # Example of setting datasets to run
+
 # Optional: limit which dataset folders to run. Accepts exact folder names under DATA_DIR.
-RUN_DATASETS: list[str] = _parse_dataset_env(os.environ.get("HYPOTHESIS_DATASETS"))
+RUN_DATASETS: list[str] = os.environ.get("HYPOTHESIS_DATASETS", "").split(",")
+RUN_DATASETS = [ds.strip() for ds in RUN_DATASETS if ds.strip()]
+RUN_DATASETS - None if len(RUN_DATASETS) == 0 else RUN_DATASETS
 
 
 def _cache_key(emb_spec) -> str:
