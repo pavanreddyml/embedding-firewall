@@ -51,9 +51,7 @@ from run_eval import (
 )
 
 # Optional: limit which dataset folders to run. Accepts exact folder names under DATA_DIR.
-RUN_DATASETS: list[str] = [
-    ds.strip() for ds in os.environ.get("HYPOTHESIS_DATASETS", "").split(",") if ds.strip()
-]
+RUN_DATASETS: list[str] = _parse_dataset_env(os.environ.get("HYPOTHESIS_DATASETS"))
 
 
 def _cache_key(emb_spec) -> str:
