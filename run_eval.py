@@ -27,6 +27,19 @@ def _in_colab() -> bool:
 # -----------------------------
 IN_COLAB = _in_colab()
 
+
+def _parse_dataset_env(val: str | None) -> list[str]:
+    """Parse a comma-separated dataset env var, handling None-ish values."""
+
+    if val is None:
+        return []
+
+    stripped = val.strip()
+    if not stripped or stripped.lower() in {"none", "null"}:
+        return []
+
+    return [ds.strip() for ds in stripped.split(",") if ds.strip()]
+
 # Unique identifier for this experiment run. Set the same RUN_ID across
 # multiple notebooks to merge results later.
 RUN_ID = "demo_run"
@@ -36,11 +49,7 @@ RUN_ID = "demo_run"
 # Available model_ids are printed at runtime.
 RUN_MODEL_IDS: list[str] = []
 # Optional: limit which dataset folders to run. Accepts exact folder names under DATA_DIR.
-RUN_DATASETS: list[str] = [
-    ds.strip()
-    for ds in os.environ.get("RUN_DATASETS", "").split(",")
-    if ds.strip()
-]
+RUN_DATASETS: list[str] = _parse_dataset_env(os.environ.get("RUN_DATASETS"))
 
 CHEAP_EMBED_KINDS = {"st", "ollama"}
 CHEAP_RANDOM_SEARCH_TRIALS = 12
