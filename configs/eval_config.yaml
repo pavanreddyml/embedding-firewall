@@ -72,13 +72,6 @@ embeddings:
     normalize: true
 
   - kind: st
-    name: M2_hf_sfr_embedding_2r
-    model_id: Salesforce/SFR-Embedding-2_R           # state-of-the-art semantic coverage, long-context (8k)
-    device: cuda
-    batch_size: 4
-    normalize: true
-
-  - kind: st
     name: G2_hf_gist_large_v0
     model_id: avsolatorio/GIST-large-Embedding-v0    # document/structure-aware representation (grammar-heavy)
     device: cuda
