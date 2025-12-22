@@ -43,6 +43,7 @@ from run_eval import (
     EVAL_CONFIG_PATH,
     _list_dataset_dirs,
     _load_eval_config,
+    _parse_dataset_env,
     _load_test,
     _load_train_normal,
     _load_val,
