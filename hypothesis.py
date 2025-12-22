@@ -50,10 +50,10 @@ from run_eval import (
     _parse_embeddings,
 )
 
-# Optional: limit which dataset folders to run. Accepts exact folder names under DATA_DIR
-# (i.e., the stem of configs/dataset_data_<name>.yaml written by run_download_data.py).
-# Leave unset/empty/"None" to process every dataset under DATA_DIR.
-RUN_DATASETS = _parse_dataset_env("HYPOTHESIS_DATASETS")
+# Optional: limit which dataset folders to run. Accepts exact folder names under DATA_DIR.
+RUN_DATASETS: list[str] = [
+    ds.strip() for ds in os.environ.get("HYPOTHESIS_DATASETS", "").split(",") if ds.strip()
+]
 
 
 def _cache_key(emb_spec) -> str:
@@ -546,7 +546,7 @@ def run_diagnostic(eval_config: str, data_dir: str, run_dir: str, *, enable_rep_
     labels_tuple = (normal_label, borderline_label, malicious_label)
 
     dataset_dirs = _list_dataset_dirs(Path(data_dir), labels_tuple)
-    if RUN_DATASETS is not None:
+    if RUN_DATASETS:
         requested = set(RUN_DATASETS)
         dataset_dirs = [(name, path) for name, path in dataset_dirs if name in requested]
         missing = sorted(requested - {name for name, _ in dataset_dirs})

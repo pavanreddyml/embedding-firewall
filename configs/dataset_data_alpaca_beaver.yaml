@@ -39,7 +39,7 @@ labels:
       - kind: hf
         name: beavertails_malicious_unsafe
         dataset: PKU-Alignment/BeaverTails
-        subset: default
+        subset: 30k
         split: train
         streaming: true
         text_field: prompt

@@ -35,23 +35,12 @@ RUN_ID = "demo_run"
 # embeddings from configs/eval_config.yaml.
 # Available model_ids are printed at runtime.
 RUN_MODEL_IDS: list[str] = []
-def _parse_dataset_env(env_var: str) -> list[str] | None:
-    raw = os.environ.get(env_var)
-    if raw is None:
-        return None
-
-    raw_clean = raw.strip()
-    if not raw_clean or raw_clean.lower() in {"none", "null"}:
-        return None
-
-    values = [ds.strip() for ds in raw_clean.split(",") if ds.strip()]
-    return values or None
-
-
-# Optional: limit which dataset folders to run. Accepts exact folder names under DATA_DIR
-# (i.e., the stem of configs/dataset_data_<name>.yaml written by run_download_data.py).
-# Leave unset/empty/"None" to process every dataset under DATA_DIR.
-RUN_DATASETS = _parse_dataset_env("RUN_DATASETS")
+# Optional: limit which dataset folders to run. Accepts exact folder names under DATA_DIR.
+RUN_DATASETS: list[str] = [
+    ds.strip()
+    for ds in os.environ.get("RUN_DATASETS", "").split(",")
+    if ds.strip()
+]
 
 CHEAP_EMBED_KINDS = {"st", "ollama"}
 CHEAP_RANDOM_SEARCH_TRIALS = 12
@@ -252,7 +241,7 @@ def run_eval(
     labels_tuple = (normal_label, borderline_label, malicious_label)
 
     dataset_dirs = _list_dataset_dirs(data_dir_path, labels_tuple)
-    if RUN_DATASETS is not None:
+    if RUN_DATASETS:
         requested = set(RUN_DATASETS)
         dataset_dirs = [(name, path) for name, path in dataset_dirs if name in requested]
         missing = sorted(requested - {name for name, _ in dataset_dirs})
