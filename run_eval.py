@@ -1,6 +1,7 @@
 # file: run_eval.py
 from __future__ import annotations
 
+import os
 import time
 import shutil
 from pathlib import Path
@@ -34,6 +35,12 @@ RUN_ID = "demo_run"
 # embeddings from configs/eval_config.yaml.
 # Available model_ids are printed at runtime.
 RUN_MODEL_IDS: list[str] = []
+# Optional: limit which dataset folders to run. Accepts exact folder names under DATA_DIR.
+RUN_DATASETS: list[str] = [
+    ds.strip()
+    for ds in os.environ.get("RUN_DATASETS", "").split(",")
+    if ds.strip()
+]
 
 CHEAP_EMBED_KINDS = {"st", "ollama"}
 CHEAP_RANDOM_SEARCH_TRIALS = 12
@@ -234,6 +241,13 @@ def run_eval(
     labels_tuple = (normal_label, borderline_label, malicious_label)
 
     dataset_dirs = _list_dataset_dirs(data_dir_path, labels_tuple)
+    if RUN_DATASETS:
+        requested = set(RUN_DATASETS)
+        dataset_dirs = [(name, path) for name, path in dataset_dirs if name in requested]
+        missing = sorted(requested - {name for name, _ in dataset_dirs})
+        if missing:
+            raise SystemExit(f"[run] Unknown dataset folders requested via RUN_DATASETS: {missing}")
+
     if not dataset_dirs:
         raise SystemExit(f"[run] No dataset folders found under {data_dir_path}; expected subdirs with label shards")
 

@@ -1,0 +1,60 @@
+seed: 42
+
+text_filters:
+  min_chars: 10
+  max_chars: 20000
+  normalize_ws: true
+
+labels:
+  normal:
+    sources:
+      # Source: Python Code (Strict syntax, logic, reserved keywords)
+      # Very high distance from natural language hate speech.
+      - kind: hf
+        name: python_code_flytech
+        dataset: flytech/python-codes-25k
+        split: train
+        streaming: true
+        text_field: text # Contains input + python code output
+        max_rows: 100000
+
+      - kind: hf
+        name: python_code_alpaca
+        dataset: sahil2801/CodeAlpaca-20k
+        split: train
+        streaming: true
+        text_field: code # Focus purely on the code part
+        max_rows: 100000
+
+  borderline:
+    sources:
+      # Source: Jigsaw Toxic (Mild toxicity, informal NL)
+      - kind: hf
+        name: jigsaw_borderline
+        dataset: thesofakillers/jigsaw-toxic-comment-classification-challenge
+        subset: default
+        split: train
+        streaming: true
+        text_field: comment_text
+        filters:
+          eq:
+            toxic: 1
+            severe_toxic: 0
+            threat: 0
+            identity_hate: 0
+        max_rows: 100000
+
+  malicious:
+    sources:
+      # Source: Jigsaw Severe (Severe toxicity, hate speech)
+      - kind: hf
+        name: jigsaw_malicious
+        dataset: thesofakillers/jigsaw-toxic-comment-classification-challenge
+        subset: default
+        split: train
+        streaming: true
+        text_field: comment_text
+        filters:
+          eq:
+            severe_toxic: 1
+        max_rows: 100000
