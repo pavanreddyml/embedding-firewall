@@ -43,11 +43,17 @@ from run_eval import (
     EVAL_CONFIG_PATH,
     _list_dataset_dirs,
     _load_eval_config,
+    _parse_dataset_env,
     _load_test,
     _load_train_normal,
     _load_val,
     _parse_embeddings,
 )
+
+# Optional: limit which dataset folders to run. Accepts exact folder names under DATA_DIR
+# (i.e., the stem of configs/dataset_data_<name>.yaml written by run_download_data.py).
+# Leave unset/empty/"None" to process every dataset under DATA_DIR.
+RUN_DATASETS = _parse_dataset_env("HYPOTHESIS_DATASETS")
 
 
 def _cache_key(emb_spec) -> str:
@@ -540,6 +546,14 @@ def run_diagnostic(eval_config: str, data_dir: str, run_dir: str, *, enable_rep_
     labels_tuple = (normal_label, borderline_label, malicious_label)
 
     dataset_dirs = _list_dataset_dirs(Path(data_dir), labels_tuple)
+    if RUN_DATASETS is not None:
+        requested = set(RUN_DATASETS)
+        dataset_dirs = [(name, path) for name, path in dataset_dirs if name in requested]
+        missing = sorted(requested - {name for name, _ in dataset_dirs})
+        if missing:
+            raise SystemExit(
+                f"[hypothesis] Unknown dataset folders requested via HYPOTHESIS_DATASETS: {missing}"
+            )
     if not dataset_dirs:
         raise SystemExit(f"[hypothesis] No dataset folders found under {data_dir}")
 

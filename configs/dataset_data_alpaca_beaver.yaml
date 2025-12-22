@@ -1,0 +1,49 @@
+seed: 42
+
+text_filters:
+  min_chars: 10
+  max_chars: 10000
+  normalize_ws: true
+
+labels:
+  normal:
+    sources:
+      # Source: Alpaca Instructions (Helpful, instructional structure)
+      - kind: hf
+        name: alpaca_normal_instructions
+        dataset: tatsu-lab/alpaca
+        split: train
+        streaming: true
+        text_field: text  # Contains the formatted "Instruction: ... Input: ... "
+        max_rows: 100000
+
+  borderline:
+    sources:
+      # Source: Toxic Chat (Conversational toxicity, no jailbreak)
+      - kind: hf
+        name: toxicchat_borderline
+        dataset: lmsys/toxic-chat
+        subset: toxicchat0124
+        split: train
+        streaming: true
+        text_field: user_input
+        filters:
+          eq:
+            toxicity: 1
+            jailbreaking: 0
+        max_rows: 100000
+
+  malicious:
+    sources:
+      # Source: BeaverTails (Harmful/Unsafe prompts)
+      - kind: hf
+        name: beavertails_malicious_unsafe
+        dataset: PKU-Alignment/BeaverTails
+        subset: default
+        split: train
+        streaming: true
+        text_field: prompt
+        filters:
+          eq:
+            is_safe: false
+        max_rows: 100000

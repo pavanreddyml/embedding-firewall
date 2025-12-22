@@ -1,0 +1,51 @@
+seed: 42
+
+text_filters:
+  min_chars: 10
+  max_chars: 10000
+  normalize_ws: true
+
+labels:
+  normal:
+    sources:
+      # Source: MetaMath (Math problems, logic, equations, numbers)
+      - kind: hf
+        name: metamath_qa
+        dataset: meta-math/MetaMathQA
+        split: train
+        streaming: true
+        text_field: response # The step-by-step mathematical solution
+        max_rows: 100000
+
+  borderline:
+    sources:
+      # Source: Jigsaw Toxic (Mild toxicity)
+      - kind: hf
+        name: jigsaw_borderline
+        dataset: thesofakillers/jigsaw-toxic-comment-classification-challenge
+        subset: default
+        split: train
+        streaming: true
+        text_field: comment_text
+        filters:
+          eq:
+            toxic: 1
+            severe_toxic: 0
+            threat: 0
+            identity_hate: 0
+        max_rows: 100000
+
+  malicious:
+    sources:
+      # Source: Jigsaw Severe (Severe toxicity)
+      - kind: hf
+        name: jigsaw_malicious
+        dataset: thesofakillers/jigsaw-toxic-comment-classification-challenge
+        subset: default
+        split: train
+        streaming: true
+        text_field: comment_text
+        filters:
+          eq:
+            severe_toxic: 1
+        max_rows: 100000

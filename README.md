@@ -19,7 +19,30 @@ Key changes vs earlier versions:
 
 3) Edit a dataset config (examples in `configs/`), then build:
 - `python run.py`
-  - This will build a dataset JSON (if missing) and then run experiments (optional toggles inside `run.py`).
+ - This will build a dataset JSON (if missing) and then run experiments (optional toggles inside `run.py`).
+
+### Selecting specific datasets during evaluation
+
+Both `run_eval.py` and `hypothesis.py` accept a comma-separated environment variable that filters which downloaded datasets to load. Provide the dataset **folder names** under `./data` (the stem of the corresponding `configs/dataset_data_<name>.yaml` file):
+
+- `RUN_DATASETS` for `run_eval.py`
+- `HYPOTHESIS_DATASETS` for `hypothesis.py`
+
+Example: if you downloaded from `configs/dataset_data_wiki_tweets.yaml` and `configs/dataset_data_code_jigsaw.yaml`, the shards live in `./data/wiki_tweets` and `./data/code_jigsaw`. To evaluate only those two:
+
+```bash
+export RUN_DATASETS=wiki_tweets,code_jigsaw
+python run_eval.py
+```
+
+Leave the variable unset, empty, or set to `None`/`none` to process every dataset folder under `./data` that contains `normal`, `borderline`, and `malicious` shard files.
+
+To run four datasets at once (for example: wiki_tweets, alpaca_beaver, code_jigsaw, metamath_jigsaw):
+
+```bash
+export RUN_DATASETS=wiki_tweets,alpaca_beaver,code_jigsaw,metamath_jigsaw
+python run_eval.py
+```
 
 ## Stronger paper-ready baselines
 

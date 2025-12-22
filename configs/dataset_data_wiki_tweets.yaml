@@ -1,0 +1,49 @@
+seed: 42
+
+text_filters:
+  min_chars: 10
+  max_chars: 10000
+  normalize_ws: true
+
+labels:
+  normal:
+    sources:
+      # Source: Wikipedia articles (Formal, clean, encyclopedic)
+      - kind: hf
+        name: wikitext_normal_clean
+        dataset: Salesforce/wikitext
+        subset: wikitext-103-raw-v1
+        split: train
+        streaming: true
+        text_field: text
+        max_rows: 100000
+
+  borderline:
+    sources:
+      # Source: Tweets labeled as Offensive (Informal, mild toxicity)
+      - kind: hf
+        name: tweeteval_borderline_offensive
+        dataset: cardiffnlp/tweet_eval
+        subset: offensive
+        split: train
+        streaming: true
+        text_field: text
+        filters:
+          eq:
+            label: 1
+        max_rows: 100000
+
+  malicious:
+    sources:
+      # Source: Tweets labeled as Hate Speech (Informal, severe toxicity)
+      - kind: hf
+        name: tweeteval_malicious_hate
+        dataset: cardiffnlp/tweet_eval
+        subset: hate
+        split: train
+        streaming: true
+        text_field: text
+        filters:
+          eq:
+            label: 1
+        max_rows: 100000
