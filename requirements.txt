@@ -6,7 +6,10 @@ pyyaml>=6.0
 tqdm>=4.66
 
 # Hugging Face datasets (streaming)
-datasets>=2.19
+# datasets 3.x drops support for dataset loading scripts (e.g., `xsum.py`),
+# which we still rely on for several sources. Pin to <3.0 to avoid
+# RuntimeError: "Dataset scripts are no longer supported, but found xsum.py".
+datasets>=2.19,<3.0
 huggingface_hub>=0.24
 
 # Embeddings / models
