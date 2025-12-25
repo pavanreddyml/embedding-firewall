@@ -1,4 +1,3 @@
-# file: embfirewall/embeddings/spec.py
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
@@ -23,24 +22,21 @@ class EmbeddingSpec:
         ollama_request_timeout: float = 120.0,
         trust_remote_code: bool = True,
     ) -> None:
-        self.kind = str(kind)  # "st" | "openai"
+        self.kind = str(kind)
         self.name = str(name)
         self.model_id = str(model_id)
         self.batch_size = int(batch_size)
         self.normalize = bool(normalize)
 
-        # ST-only
         self.device = str(device)
         self.trust_remote_code = bool(trust_remote_code)
 
-        # OpenAI-only
         self.dimensions = int(dimensions) if dimensions is not None else None
         self.openai_api_key_env = str(openai_api_key_env)
         self.openai_base_url = openai_base_url
         self.openai_organization = openai_organization
         self.openai_project = openai_project
 
-        # Ollama-only
         self.ollama_base_url = ollama_base_url
         self.ollama_request_timeout = float(ollama_request_timeout)
 

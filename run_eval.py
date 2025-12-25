@@ -1,9 +1,8 @@
-# file: run_eval.py
 from __future__ import annotations
 
 import os
-import time
 import shutil
+import time
 from pathlib import Path
 
 import yaml
@@ -15,22 +14,17 @@ from embfirewall.runner import DatasetSlices, ExperimentRunner, RunConfig
 
 def _in_colab() -> bool:
     try:
-        import google.colab  # type: ignore  # noqa: F401
+        import importlib
 
-        return True
+        return importlib.util.find_spec("google.colab") is not None
     except Exception:
         return False
 
 
-# -----------------------------
-# GLOBAL PATHS (edit this file)
-# -----------------------------
 IN_COLAB = _in_colab()
 
 
 def _parse_dataset_env(val: str | None) -> list[str]:
-    """Parse a comma-separated dataset env var, handling None-ish values."""
-
     if val is None:
         return []
 
@@ -40,22 +34,15 @@ def _parse_dataset_env(val: str | None) -> list[str]:
 
     return [ds.strip() for ds in stripped.split(",") if ds.strip()]
 
-# Unique identifier for this experiment run. Set the same RUN_ID across
-# multiple notebooks to merge results later.
 RUN_ID = "demo_run"
-
-# Optional: limit which embedding model_ids to run. Leave empty to run all
-# embeddings from configs/eval_config.yaml.
-# Available model_ids are printed at runtime.
 RUN_MODEL_IDS: list[str] = []
-# Optional: limit which dataset folders to run. Accepts exact folder names under DATA_DIR.
 RUN_DATASETS: list[str] = _parse_dataset_env(os.environ.get("RUN_DATASETS"))
 
 CHEAP_EMBED_KINDS = {"st", "ollama"}
 CHEAP_RANDOM_SEARCH_TRIALS = 12
 
 LOCAL_BASE_DIR = "."
-COLAB_BASE_DIR = "/content/drive/MyDrive/research/embfirewall"  # <-- change to your folder on Drive
+COLAB_BASE_DIR = "/content/drive/MyDrive/research/embfirewall"
 
 WORKING_DIR = LOCAL_BASE_DIR
 STORAGE_DIR = COLAB_BASE_DIR if IN_COLAB else LOCAL_BASE_DIR
@@ -63,7 +50,6 @@ STORAGE_DIR = COLAB_BASE_DIR if IN_COLAB else LOCAL_BASE_DIR
 DATA_DIR = str(Path(STORAGE_DIR) / "data")
 RUNS_DIR = str(Path(STORAGE_DIR) / "runs")
 EVAL_CONFIG_PATH = str(Path(WORKING_DIR) / "configs" / "eval_config.yaml")
-# -----------------------------
 
 
 def _counts(ls: list[str]) -> dict[str, int]:
@@ -122,8 +108,6 @@ def _list_dataset_dirs(data_root: Path, labels: tuple[str, str, str]) -> list[tu
     for p in sorted(data_root.iterdir()):
         if not p.is_dir():
             continue
-        # Accept either flat label shards (<label>-00000.json) or per-label subfolders
-        # (<label>/<label>-00000.json) as produced by run_download_data.py.
         if all(_list_label_files(p, lab) for lab in labels):
             out.append((p.name, p))
     return out
@@ -224,7 +208,6 @@ def run_eval(
     else:
         run_id = RUN_ID
 
-    # dataset settings from eval_config.yaml
     ds_cfg = eval_cfg.get("dataset") or {}
     seed = int(ds_cfg.get("seed", 7))
     max_train_normal = ds_cfg.get("max_train_normal", 20000)
@@ -370,7 +353,7 @@ def run_eval(
                 normal_label=normal_label,
                 borderline_label=borderline_label,
                 malicious_label=malicious_label,
-                fpr_points=fpr_points_t,  # type: ignore
+                fpr_points=fpr_points_t,
                 embedding_models=[emb_spec],
                 enable_keyword=enable_keyword,
                 enable_unsupervised=enable_unsup,

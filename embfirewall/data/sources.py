@@ -1,4 +1,3 @@
-# file: embfirewall/data/sources.py
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,9 +6,9 @@ from typing import Any, Dict, Iterator, List, Optional, Sequence
 from .types import SourceExample
 
 try:
-    from datasets import load_dataset  # type: ignore
+    from datasets import load_dataset
 except Exception:
-    load_dataset = None  # type: ignore
+    load_dataset = None
 
 
 def _as_list(x: Any) -> List[Any]:
@@ -92,18 +91,15 @@ class HFDatasetsSource(PromptSource):
     filters: Optional[Dict[str, Any]] = None
 
     def _extract_text(self, ex: Any) -> Optional[str]:
-        # If text_fields provided, use first non-empty str
         if self.text_fields:
             for f in self.text_fields:
                 v = _get(ex, f)
                 if isinstance(v, str) and v.strip():
                     return v
-        # If single text_field
         if self.text_field:
             v = _get(ex, self.text_field)
             if isinstance(v, str) and v.strip():
                 return v
-        # Common fallbacks
         for f in ("prompt", "question", "instruction", "query", "text", "input"):
             v = _get(ex, f)
             if isinstance(v, str) and v.strip():
@@ -138,7 +134,6 @@ class HFDatasetsSource(PromptSource):
 def make_source(kind: str, **spec: Any) -> PromptSource:
     kind = str(kind).lower().strip()
 
-    # ignore config-only keys
     spec.pop("weight", None)
     spec.pop("target", None)
     spec.pop("quota", None)

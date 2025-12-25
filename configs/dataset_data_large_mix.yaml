@@ -1,0 +1,359 @@
+seed: 42
+
+text_filters:
+  min_chars: 10
+  max_chars: 20000
+  normalize_ws: true
+
+labels:
+  normal:
+    sources:
+      - kind: hf
+        name: alpaca_normal_50k
+        dataset: tatsu-lab/alpaca
+        split: train
+        streaming: true
+        text_field: text
+        max_rows: 50000
+
+      - kind: hf
+        name: wikitext103_raw_normal_50k
+        dataset: Salesforce/wikitext
+        subset: wikitext-103-raw-v1
+        split: train
+        streaming: true
+        text_field: text
+        max_rows: 50000
+
+      - kind: hf
+        name: metamathqa_normal_50k
+        dataset: meta-math/MetaMathQA
+        subset: default
+        split: train
+        streaming: true
+        text_field: response
+        max_rows: 50000
+
+      - kind: hf
+        name: code_search_net_python_normal_50k
+        dataset: Nan-Do/code-search-net-python
+        subset: default
+        split: train
+        streaming: true
+        text_field: code
+        max_rows: 50000
+
+      - kind: hf
+        name: wikipedia_dump_en_normal_50k
+        dataset: wikimedia/wikipedia
+        subset: 20231101.en
+        split: train
+        streaming: true
+        text_field: text
+        max_rows: 50000
+
+      - kind: hf
+        name: c4_en_normal_50k
+        dataset: allenai/c4
+        subset: en
+        split: train
+        streaming: true
+        text_field: text
+        max_rows: 50000
+
+      - kind: hf
+        name: squad_context_normal_50k
+        dataset: rajpurkar/squad
+        split: train
+        streaming: true
+        text_field: context
+        max_rows: 50000
+
+      - kind: hf
+        name: xsum_document_normal_50k
+        dataset: EdinburghNLP/xsum
+        split: train
+        streaming: true
+        text_field: document
+        max_rows: 50000
+
+      - kind: hf
+        name: wildguardmix_vanilla_unharmful_normal_50k
+        dataset: allenai/wildguardmix
+        subset: wildguardtrain
+        split: train
+        streaming: true
+        token: true
+        text_field: prompt
+        filters:
+          eq:
+            adversarial: false
+            prompt_harm_label: unharmful
+        max_rows: 50000
+
+      - kind: hf
+        name: wildjailbreak_vanilla_benign_normal_50k
+        dataset: allenai/wildjailbreak
+        subset: train
+        split: train
+        streaming: true
+        token: true
+        text_field: vanilla
+        filters:
+          eq:
+            data_type: vanilla_benign
+        max_rows: 50000
+
+  borderline:
+    sources:
+      - kind: hf
+        name: toxicchat_borderline_5k
+        dataset: lmsys/toxic-chat
+        subset: toxicchat0124
+        split: train
+        streaming: true
+        text_field: user_input
+        filters:
+          eq:
+            toxicity: 1
+            jailbreaking: 0
+        max_rows: 5000
+
+      - kind: hf
+        name: jigsaw_mild_toxic_train_borderline_5k
+        dataset: thesofakillers/jigsaw-toxic-comment-classification-challenge
+        subset: default
+        split: train
+        streaming: true
+        text_field: comment_text
+        filters:
+          eq:
+            toxic: 1
+            severe_toxic: 0
+            threat: 0
+            identity_hate: 0
+        max_rows: 5000
+
+      - kind: hf
+        name: jigsaw_mild_toxic_test_borderline_5k
+        dataset: thesofakillers/jigsaw-toxic-comment-classification-challenge
+        subset: default
+        split: test
+        streaming: true
+        text_field: comment_text
+        filters:
+          eq:
+            toxic: 1
+            severe_toxic: 0
+            threat: 0
+            identity_hate: 0
+        max_rows: 5000
+
+      - kind: hf
+        name: tweeteval_offensive_train_borderline_5k
+        dataset: cardiffnlp/tweet_eval
+        subset: offensive
+        split: train
+        streaming: true
+        text_field: text
+        filters:
+          eq:
+            label: 1
+        max_rows: 5000
+
+      - kind: hf
+        name: tweeteval_offensive_test_borderline_5k
+        dataset: cardiffnlp/tweet_eval
+        subset: offensive
+        split: test
+        streaming: true
+        text_field: text
+        filters:
+          eq:
+            label: 1
+        max_rows: 5000
+
+      - kind: hf
+        name: tdavidson_offensive_borderline_5k
+        dataset: tdavidson/hate_speech_offensive
+        split: train
+        streaming: true
+        text_field: tweet
+        filters:
+          eq:
+            label: 1
+        max_rows: 5000
+
+      - kind: hf
+        name: badmatr11x_offensive_borderline_5k
+        dataset: badmatr11x/hate-offensive-speech
+        split: train
+        streaming: true
+        text_field: tweet
+        filters:
+          eq:
+            label: 1
+        max_rows: 5000
+
+      - kind: hf
+        name: social_bias_frames_maybe_offensive_borderline_5k
+        dataset: allenai/social_bias_frames
+        split: train
+        streaming: true
+        text_field: post
+        filters:
+          eq:
+            offensiveYN: "0.5"
+        max_rows: 5000
+
+      - kind: hf
+        name: wildguardmix_adversarial_unharmful_borderline_5k
+        dataset: allenai/wildguardmix
+        subset: wildguardtrain
+        split: train
+        streaming: true
+        token: true
+        text_field: prompt
+        filters:
+          eq:
+            adversarial: true
+            prompt_harm_label: unharmful
+        max_rows: 5000
+
+      - kind: hf
+        name: wildjailbreak_adversarial_benign_borderline_5k
+        dataset: allenai/wildjailbreak
+        subset: train
+        split: train
+        streaming: true
+        token: true
+        text_field: adversarial
+        filters:
+          eq:
+            data_type: adversarial_benign
+        max_rows: 5000
+
+  malicious:
+    sources:
+      - kind: hf
+        name: beavertails_unsafe_malicious_5k
+        dataset: PKU-Alignment/BeaverTails
+        subset: default
+        split: 330k_train
+        streaming: true
+        text_field: prompt
+        filters:
+          eq:
+            is_safe: false
+        max_rows: 5000
+
+      - kind: hf
+        name: jigsaw_severe_toxic_malicious_5k
+        dataset: thesofakillers/jigsaw-toxic-comment-classification-challenge
+        subset: default
+        split: train
+        streaming: true
+        text_field: comment_text
+        filters:
+          eq:
+            severe_toxic: 1
+        max_rows: 5000
+
+      - kind: hf
+        name: jigsaw_threat_only_malicious_5k
+        dataset: thesofakillers/jigsaw-toxic-comment-classification-challenge
+        subset: default
+        split: train
+        streaming: true
+        text_field: comment_text
+        filters:
+          eq:
+            threat: 1
+            severe_toxic: 0
+        max_rows: 5000
+
+      - kind: hf
+        name: jigsaw_identity_hate_only_malicious_5k
+        dataset: thesofakillers/jigsaw-toxic-comment-classification-challenge
+        subset: default
+        split: train
+        streaming: true
+        text_field: comment_text
+        filters:
+          eq:
+            identity_hate: 1
+            severe_toxic: 0
+            threat: 0
+        max_rows: 5000
+
+      - kind: hf
+        name: tweeteval_hate_train_malicious_5k
+        dataset: cardiffnlp/tweet_eval
+        subset: hate
+        split: train
+        streaming: true
+        text_field: text
+        filters:
+          eq:
+            label: 1
+        max_rows: 5000
+
+      - kind: hf
+        name: tdavidson_hate_malicious_5k
+        dataset: tdavidson/hate_speech_offensive
+        split: train
+        streaming: true
+        text_field: tweet
+        filters:
+          eq:
+            label: 0
+        max_rows: 5000
+
+      - kind: hf
+        name: badmatr11x_hate_malicious_5k
+        dataset: badmatr11x/hate-offensive-speech
+        split: train
+        streaming: true
+        text_field: tweet
+        filters:
+          eq:
+            label: 0
+        max_rows: 5000
+
+      - kind: hf
+        name: social_bias_frames_offensive_malicious_5k
+        dataset: allenai/social_bias_frames
+        split: train
+        streaming: true
+        text_field: post
+        filters:
+          eq:
+            offensiveYN: "1.0"
+        max_rows: 5000
+
+      - kind: hf
+        name: wildguardmix_harmful_adversarial_malicious_5k
+        dataset: allenai/wildguardmix
+        subset: wildguardtrain
+        split: train
+        streaming: true
+        token: true
+        text_field: prompt
+        filters:
+          eq:
+            adversarial: true
+            prompt_harm_label: harmful
+        max_rows: 5000
+
+      - kind: hf
+        name: wildjailbreak_adversarial_harmful_malicious_5k
+        dataset: allenai/wildjailbreak
+        subset: train
+        split: train
+        streaming: true
+        token: true
+        text_field: adversarial
+        filters:
+          eq:
+            data_type: adversarial_harmful
+        max_rows: 5000

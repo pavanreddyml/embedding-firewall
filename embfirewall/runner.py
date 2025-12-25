@@ -1,4 +1,3 @@
-# file: embfirewall/runner.py
 from __future__ import annotations
 
 import json
@@ -8,9 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
-from scipy.stats import randint, uniform, loguniform
 from sklearn.metrics import average_precision_score, roc_auc_score
-from sklearn.model_selection import PredefinedSplit, RandomizedSearchCV
 from tqdm import tqdm
 
 from .detectors import DEFAULT_PATTERNS, KeywordBaseline
@@ -20,7 +17,6 @@ from .viz import write_all_figures
 
 
 def _y_binary(label: str, malicious_label: str) -> int:
-    # We treat only the configured malicious label as positive
     return 1 if label == malicious_label else 0
 
 
@@ -52,21 +48,18 @@ class RunConfig:
     borderline_label: str = "borderline"
     malicious_label: str = "malicious"
 
-    # Operating points (target FPR) are calibrated on NORMAL validation rows by default
     fpr_points: Tuple[float, float] = (0.05, 0.10)
-    threshold_calibration_set: str = "val"  # "val" (recommended) or "test" (not recommended; leakage)
+    threshold_calibration_set: str = "val"
 
-    # Supervised detectors are trained on a portion of val, and thresholds are calibrated on the rest
     supervised_val_fit_frac: float = 0.5
 
-    embedding_models: List[EmbeddingSpec] = None  # type: ignore
+    embedding_models: Optional[List[EmbeddingSpec]] = None
 
     enable_unsupervised: bool = True
     enable_supervised: bool = True
     enable_keyword: bool = True
     enable_random_search: bool = True
 
-    # Hyperparameter search (only applied to cheap/local embeddings)
     random_search_trials: int = 0
     random_search_metric: str = "auroc"
     random_search_seed: int = 1234
@@ -75,8 +68,6 @@ class RunConfig:
     supervised_detectors: Optional[List[Dict[str, Any]]] = None
     keyword_patterns: Optional[List[str]] = None
 
-    # Metrics for unsupervised/keyword runs can optionally widen the positive set beyond malicious.
-    # Defaults to (malicious_label, borderline_label) to surface adversarial-like borderline rows.
     unsupervised_positive_labels: Optional[Tuple[str, ...]] = None
 
     def __post_init__(self) -> None:
@@ -108,7 +99,6 @@ class RunConfig:
                 {"type": "ocsvm", "nu": 0.05, "kernel": "rbf", "gamma": "scale", "name": "ocsvm_rbf"},
                 {"type": "ocsvm", "nu": 0.05, "kernel": "sigmoid", "gamma": "scale", "name": "ocsvm_sig"},
                 {"type": "iforest", "n_estimators": 400, "max_samples": "auto", "name": "iforest400"},
-                # extras (strong baselines)
                 {"type": "mahalanobis", "name": "mahal"},
                 {"type": "lof", "n_neighbors": 35, "name": "lof35"},
                 {"type": "lof", "n_neighbors": 60, "name": "lof60"},
@@ -216,7 +206,6 @@ class ExperimentRunner:
         self.test_is_malicious = np.array([x == cfg.malicious_label for x in data.test_labels], dtype=bool)
         self.test_is_borderline = np.array([x == cfg.borderline_label for x in data.test_labels], dtype=bool)
 
-        # Supervised: split val into fit/calibration (stratified by val_y)
         self.sup_fit_idx, self.sup_cal_idx = self._stratified_split_indices(
             self.val_y, frac=float(cfg.supervised_val_fit_frac), seed=1337
         )
@@ -246,7 +235,6 @@ class ExperimentRunner:
 
     @staticmethod
     def _metrics_summary(y: np.ndarray, scores: np.ndarray) -> Dict[str, Any]:
-        # y: {0,1}; scores: higher => more likely positive
         out: Dict[str, Any] = {}
         try:
             out["auroc"] = float(roc_auc_score(y, scores))
@@ -273,7 +261,6 @@ class ExperimentRunner:
         vals = np.unique(normal_scores)
         vals.sort()
 
-        # Try increasing thresholds until we meet the FPR budget.
         best_thr = float(vals[-1])
         found = False
         for thr in vals:
@@ -283,8 +270,6 @@ class ExperimentRunner:
                 found = True
                 break
 
-        # If nothing meets budget (can happen if all scores identical and target_fpr < 1),
-        # force thr above max to yield FPR=0.
         if not found:
             best_thr = float(vals[-1]) + 1e-12
 
@@ -299,19 +284,16 @@ class ExperimentRunner:
     ) -> Dict[str, Any]:
         pred = scores_test >= thr
 
-        # test FPR on normal
         n_norm = int(np.sum(self.test_is_normal))
         fp = int(np.sum(pred & self.test_is_normal))
         test_fpr = float(fp / n_norm) if n_norm > 0 else 0.0
         fpr_ci = _wilson_ci(fp, n_norm)
 
-        # TPR on malicious
         n_mal = int(np.sum(self.test_is_malicious))
         tp = int(np.sum(pred & self.test_is_malicious))
         tpr = float(tp / n_mal) if n_mal > 0 else 0.0
         tpr_ci = _wilson_ci(tp, n_mal)
 
-        # borderline block rate
         n_bl = int(np.sum(self.test_is_borderline))
         bl_block = int(np.sum(pred & self.test_is_borderline))
         bl_rate = float(bl_block / n_bl) if n_bl > 0 else 0.0
@@ -332,7 +314,6 @@ class ExperimentRunner:
         summary = self._metrics_summary(y, scores)
         key = self.cfg.random_search_metric
         if key not in summary or summary[key] is None:
-            # fall back to any available metric
             for alt in ("auroc", "auprc"):
                 if summary.get(alt) is not None:
                     return float(summary[alt])
@@ -342,7 +323,6 @@ class ExperimentRunner:
     @staticmethod
     def _is_expensive_detector(spec: Dict[str, Any]) -> bool:
         t = str(spec.get("type", "")).lower()
-        # Avoid random search for slower detectors that are expensive to fit.
         return t in {"autoencoder", "vae", "gan", "linsvm", "ocsvm", "iforest", "lof"}
 
     def _random_search_trials_for_spec(self, spec: Dict[str, Any]) -> int:
@@ -398,7 +378,6 @@ class ExperimentRunner:
             spec["max_samples"] = self.rng.choice(["auto", 0.5, 0.8, 1.0])
             spec.setdefault("random_state", self.cfg.random_search_seed)
         elif t == "mahalanobis":
-            # no tunable hyperparams; return unchanged but keep unique name
             pass
         elif t == "pca":
             spec["n_components"] = int(self.rng.randint(8, 256))
@@ -513,7 +492,6 @@ class ExperimentRunner:
         X, dt_embed = embedder.embed(texts, desc=f"embed[{emb_spec.name}]")
 
         dt_total = time.time() - t0_total
-        # Report the wall-clock time spent retrieving/embedding for transparency.
         return X, float(dt_total)
 
     def run(self) -> str:
@@ -543,7 +521,12 @@ class ExperimentRunner:
             "runs": [],
         }
 
-        # Keyword baseline
+        out_path = ensure_parent_dir(self.run_dir / "results.json")
+
+        def write_results_snapshot() -> None:
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(results, f, ensure_ascii=False, indent=2)
+
         if self.cfg.enable_keyword:
             patterns = self.cfg.keyword_patterns or DEFAULT_PATTERNS
             kw = KeywordBaseline(patterns)
@@ -552,7 +535,6 @@ class ExperimentRunner:
             scores_val = kw.score_texts(self.data.val_texts)
             scores_test = kw.score_texts(self.data.test_texts)
 
-            # calibration normals
             if self.cfg.threshold_calibration_set == "test":
                 cal_normals = scores_test[self.test_is_normal]
             else:
@@ -578,8 +560,8 @@ class ExperimentRunner:
                     "latency_s": {"detector": None, "total": None},
                 }
             )
+            write_results_snapshot()
 
-        # Embeddings
         emb_bar = tqdm(self.cfg.embedding_models, desc="[runner] embeddings", unit="emb", leave=True)
         for emb_spec in emb_bar:
             emb_bar.set_postfix_str(emb_spec.name)
@@ -605,7 +587,6 @@ class ExperimentRunner:
                 },
             }
 
-            # Unsupervised detectors: fit(train_normal_only) -> score(val/test)
             if self.cfg.enable_unsupervised and self.cfg.unsupervised_detectors:
                 tuned_specs: List[Tuple[Dict[str, Any], Optional[float], int]] = []
                 for spec in self.cfg.unsupervised_detectors:
@@ -624,7 +605,6 @@ class ExperimentRunner:
                     scores_test = det.score(X_test)
                     dt_det = time.time() - t0
 
-                    # calibration normals
                     if self.cfg.threshold_calibration_set == "test":
                         cal_normals = scores_test[self.test_is_normal]
                     else:
@@ -674,7 +654,6 @@ class ExperimentRunner:
                         }
                     )
 
-            # Supervised detectors: fit(val_fit) -> score(val_cal/test); thresholds calibrated on val_cal normals
             if self.cfg.enable_supervised and self.cfg.supervised_detectors:
                 tuned_specs: List[Tuple[Dict[str, Any], Optional[float], int]] = []
                 for spec in self.cfg.supervised_detectors:
@@ -699,7 +678,6 @@ class ExperimentRunner:
                     scores_test = det.score(X_test)
                     dt_det = time.time() - t0
 
-                    # calibration normals from val_cal unless user forces test
                     if self.cfg.threshold_calibration_set == "test":
                         cal_normals = scores_test[self.test_is_normal]
                     else:
@@ -749,10 +727,10 @@ class ExperimentRunner:
                         }
                     )
 
-        out_path = ensure_parent_dir(self.run_dir / "results.json")
+            write_results_snapshot()
+
         print(f"\n[runner] Writing results -> {out_path}")
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(results, f, ensure_ascii=False, indent=2)
+        write_results_snapshot()
 
         figures_dir = self.run_dir / "figures"
         print(f"[runner] Writing figures -> {figures_dir}")

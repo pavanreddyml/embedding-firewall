@@ -1,4 +1,3 @@
-# file: embfirewall/embeddings/cache.py
 from __future__ import annotations
 
 import pickle
@@ -73,10 +72,6 @@ class EmbeddingCache:
         if not pending:
             return
 
-        # model identifiers sometimes include path separators (e.g. HF repos
-        # like "BAAI/bge-m3"), which would otherwise create unintended
-        # directories. Replace them with a safe token so shards stay under the
-        # configured cache directory.
         safe_model_id = model_id.replace(os.sep, "__")
 
         timestamp = int(time.time() * 1000)

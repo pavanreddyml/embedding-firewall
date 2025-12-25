@@ -1,4 +1,3 @@
-# file: embfirewall/embeddings/azure_openai_embedder.py
 from __future__ import annotations
 
 import os
@@ -12,9 +11,8 @@ from .base import Embedder
 
 
 def _build_token_counter(_model_hint: str) -> Callable[[str], int]:
-    # Azure "model" is often a deployment name; tiktoken may not recognize it.
     try:
-        import tiktoken  # type: ignore
+        import tiktoken
 
         enc = tiktoken.get_encoding("cl100k_base")
 
@@ -76,7 +74,6 @@ class AzureOpenAIEmbedder(Embedder):
         self,
         *,
         name: str,
-        # For Azure embeddings, this is typically the *deployment name*.
         model_id: str,
         batch_size: int = 128,
         normalize: bool = True,
@@ -87,7 +84,6 @@ class AzureOpenAIEmbedder(Embedder):
         api_version: Optional[str] = None,
         dimensions: Optional[int] = None,
         max_retries: int = 6,
-        # Rate limit (TPM). Default: 100k tokens/minute.
         rate_limit_tpm: int = 100_000,
         rate_limit_window_s: float = 60.0,
     ) -> None:
@@ -108,8 +104,7 @@ class AzureOpenAIEmbedder(Embedder):
         if not self.api_version:
             raise RuntimeError(f"Missing Azure api_version (param api_version or env var: {self.api_version_env})")
 
-        # openai>=1.x
-        from openai import AzureOpenAI  # type: ignore
+        from openai import AzureOpenAI
 
         self.client = AzureOpenAI(
             api_key=api_key,

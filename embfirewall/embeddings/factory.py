@@ -1,4 +1,3 @@
-# file: embfirewall/embeddings/factory.py
 from __future__ import annotations
 
 from .openai_embedder import OpenAIEmbedder

@@ -1,4 +1,3 @@
-# file: embfirewall/data/loaders.py
 from __future__ import annotations
 
 import json
@@ -54,7 +53,6 @@ def _read_json_array(path: Path, *, show_progress: bool, desc: str) -> List[Dict
 
     b = bytes(data).strip()
     if not b:
-        # empty file (likely interrupted download/write) -> treat as no rows
         print(f"[loaders] WARNING: empty file: {path}")
         return []
 
@@ -67,7 +65,6 @@ def _read_json_array(path: Path, *, show_progress: bool, desc: str) -> List[Dict
     if isinstance(obj, list):
         return [x for x in obj if isinstance(x, dict)]
 
-    # common patterns: {"data":[...]}, {"train":[...]}
     if isinstance(obj, dict):
         for v in obj.values():
             if isinstance(v, list) and v and isinstance(v[0], dict):
@@ -81,7 +78,6 @@ def _list_label_files(data_dir: Path, label: str) -> List[Path]:
     Prefer shards: <label>-00000.json, <label>-00001.json, ...
     Else single: <label>.json
     """
-    # First, look directly under the provided data directory.
     shards = sorted(p for p in data_dir.glob(f"{label}-*.json") if p.is_file())
     if shards:
         return shards
@@ -90,8 +86,6 @@ def _list_label_files(data_dir: Path, label: str) -> List[Path]:
     if single.exists():
         return [single]
 
-    # Fallback: allow datasets where each label lives in its own subfolder
-    # (e.g., <dataset>/<label>/<label>-00000.json> created by run_download_data.py).
     nested_dir = data_dir / label
     if nested_dir.is_dir():
         shards = sorted(p for p in nested_dir.glob(f"{label}-*.json") if p.is_file())
@@ -225,7 +219,6 @@ def interleave_labels(
     return out_texts, out_labels
 
 
-# Back-compat alias used by older run files
 def interleave_label_files(
     data_dir: str | Path,
     *,

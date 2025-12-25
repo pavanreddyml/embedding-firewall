@@ -1,4 +1,3 @@
-# file: run_consolidate.py
 from __future__ import annotations
 
 import json
@@ -11,31 +10,23 @@ from embfirewall.viz import write_all_figures
 
 def _in_colab() -> bool:
     try:
-        import google.colab  # type: ignore  # noqa: F401
+        import importlib
 
-        return True
+        return importlib.util.find_spec("google.colab") is not None
     except Exception:
         return False
 
 
-# -----------------------------
-# GLOBAL PATHS (edit this file)
-# -----------------------------
 IN_COLAB = _in_colab()
-
-# Run identifier to consolidate. Should match the RUN_ID used in run_eval.py
-# across parallel notebooks. This is used as the default when no --run-id is
-# provided on the command line.
 RUN_ID = "demo_run"
 
 LOCAL_BASE_DIR = "."
-COLAB_BASE_DIR = "/content/drive/MyDrive/research/embfirewall"  # <-- change to your folder on Drive
+COLAB_BASE_DIR = "/content/drive/MyDrive/research/embfirewall"
 
 WORKING_DIR = LOCAL_BASE_DIR
 STORAGE_DIR = COLAB_BASE_DIR if IN_COLAB else LOCAL_BASE_DIR
 
 RUNS_DIR = str(Path(STORAGE_DIR) / "runs")
-# -----------------------------
 
 
 def _load_results(path: Path) -> Dict[str, Any]:
@@ -139,13 +130,6 @@ def consolidate_runs(run_id: str = RUN_ID, *, storage_dir: str = STORAGE_DIR) ->
         meta["consolidated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
         meta["source_run_dirs"] = source_dirs
 
-        if datasets_meta:
-            unique_datasets = {json.dumps(ds, sort_keys=True) for ds in datasets_meta if ds is not None}
-            if len(unique_datasets) > 1:
-                print(
-                    f"[consolidate][warn] Multiple dataset configs detected across runs for {dataset_name}; using the first one."
-                )
-
         dataset_results[dataset_name] = combined
         all_runs.extend([{**r, "dataset_name": dataset_name} for r in combined.get("runs") or []])
         all_embeddings.update(combined.get("embeddings") or {})
@@ -184,5 +168,7 @@ def consolidate_runs(run_id: str = RUN_ID, *, storage_dir: str = STORAGE_DIR) ->
 
     write_all_figures(str(consolidated_results_path), str(figures_dir))
     print(f"[consolidate] Wrote cross-dataset figures -> {figures_dir}")
+
+
 if __name__ == "__main__":
     consolidate_runs()
