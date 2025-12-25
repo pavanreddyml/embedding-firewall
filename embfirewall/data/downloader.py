@@ -1,4 +1,3 @@
-# file: embfirewall/data/downloader.py
 from __future__ import annotations
 
 import json
@@ -77,7 +76,7 @@ def _write_json_file(path: Path, obj: Any) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
 
     try:
-        import orjson  # type: ignore
+        import orjson
 
         data = orjson.dumps(obj)
         tmp.write_bytes(data + b"\n")
@@ -135,7 +134,6 @@ def _init_shard_state(*, out_dir: Path, label: str, shard_size: int, overwrite: 
     if not shards:
         return _ShardState(out_dir, label, int(shard_size), 0, 0, {}, []), 0, False
 
-    # Prefer counts from metadata.json if available (fast), fall back to loading shard arrays.
     meta = _safe_load_json(out_dir / "metadata.json")
     meta_counts: Dict[int, int] = {}
     try:
@@ -170,14 +168,12 @@ def _init_shard_state(*, out_dir: Path, label: str, shard_size: int, overwrite: 
     shard_rows = last_rows
     shard_buf: List[Dict[str, Any]] = []
 
-    # If the last shard is partial, load it so we can continue filling it and then write it once at completion/end.
     if 0 < shard_rows < int(shard_size):
         obj = _safe_load_json_any(out_dir / f"{label}-{shard_idx:05d}.json")
         if isinstance(obj, list):
-            shard_buf = obj  # type: ignore[assignment]
+            shard_buf = obj
             shard_rows = len(shard_buf)
 
-    # If the last shard is full, advance to the next shard index.
     if shard_rows >= int(shard_size):
         shard_idx += 1
         shard_rows = 0
@@ -207,7 +203,6 @@ def _flush_json_sharded(
     n_rows = len(rows)
 
     while i < n_rows:
-        # If current shard is full, write it and move to next.
         if state.shard_rows >= state.shard_size:
             p = state.current_path()
             _write_json_file(p, state.shard_buf)
@@ -230,7 +225,6 @@ def _flush_json_sharded(
         state.shard_rows += len(chunk)
         i += len(chunk)
 
-    # If final, write the last partial shard once.
     if final and state.shard_rows > 0:
         p = state.current_path()
         _write_json_file(p, state.shard_buf)
@@ -314,10 +308,10 @@ def _update_metadata(
     meta["overwrite"] = bool(overwrite)
 
     try:
-        meta["text_filters"] = getattr(text_filters, "to_dict")()  # type: ignore[misc]
+        meta["text_filters"] = getattr(text_filters, "to_dict")()
     except Exception:
         try:
-            meta["text_filters"] = dict(text_filters)  # type: ignore[arg-type]
+            meta["text_filters"] = dict(text_filters)
         except Exception:
             meta["text_filters"] = str(text_filters)
 
@@ -408,7 +402,6 @@ class DatasetDownloader:
                 if target is not None and wrote >= target:
                     break
 
-                # Per-source cap (kept rows) inside this label
                 src_cap_raw = src_spec.get("max_rows", src_spec.get("cap", None))
                 src_cap: Optional[int] = None
                 if src_cap_raw is not None:
@@ -461,8 +454,6 @@ class DatasetDownloader:
                         f"kept_src={kept}{'' if src_cap is None else f'/{src_cap}'} shard={state.shard_idx:05d}"
                     )
 
-                    # Note: with JSON-array shards, this "flush" just moves rows into the in-memory shard buffer.
-                    # Actual file writes happen only when a shard fills (or at the very end).
                     if len(buf) >= self.flush_every:
                         flushed_n = len(buf)
                         _bytes, _total_bytes, state = _flush_json_sharded(state, buf, final=False)
@@ -484,7 +475,6 @@ class DatasetDownloader:
                     f"{'' if target is None else f'/{target}'} shard={state.shard_idx:05d}"
                 )
 
-            # Write the final partial shard once.
             _bytes, _total_bytes, state = _flush_json_sharded(state, [], final=True)
 
         finally:

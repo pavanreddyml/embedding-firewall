@@ -1,4 +1,3 @@
-# file: embfirewall/detectors/keywords.py
 from __future__ import annotations
 
 import re

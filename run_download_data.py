@@ -1,7 +1,7 @@
-# file: scripts/download_data.py
 from __future__ import annotations
 
 from pathlib import Path
+
 import yaml
 
 from embfirewall.data.downloader import DatasetDownloader
@@ -10,19 +10,16 @@ from embfirewall.data.types import TextFilters
 
 def _in_colab() -> bool:
     try:
-        import google.colab  # type: ignore  # noqa: F401
+        import importlib
 
-        return True
+        return importlib.util.find_spec("google.colab") is not None
     except Exception:
         return False
 
 
-# -------- GLOBALS (edit these) --------
 IN_COLAB = _in_colab()
-
-# Assume Drive already mounted in Colab.
 LOCAL_BASE_DIR = "."
-COLAB_BASE_DIR = "/content/drive/MyDrive/research/embfirewall"  # <-- change to your folder
+COLAB_BASE_DIR = "/content/drive/MyDrive/research/embfirewall"
 
 WORKING_DIR = LOCAL_BASE_DIR
 STORAGE_DIR = COLAB_BASE_DIR if IN_COLAB else LOCAL_BASE_DIR
@@ -32,10 +29,9 @@ DATASET_CONFIG_PATTERN = "dataset_data_*.yaml"
 OUT_DIR = str(Path(STORAGE_DIR) / "data")
 
 FLUSH_EVERY = 1000
-SHARD_SIZE = 1000  # writes one JSON array file per 1000 rows (crash-safe, no JSONL)
+SHARD_SIZE = 1000
 SEED = 7
-OVERWRITE = True  # downloads ALL rows; overwrite output each run to avoid duplication
-# --------------------------------------
+OVERWRITE = True
 
 
 def _dataset_configs() -> list[Path]:
@@ -111,7 +107,6 @@ def main() -> None:
         all_stats[dataset_name] = stats
         print(f"[download_data] Wrote stats: {stats_path}")
 
-    # Summary across datasets for quick inspection
     summary_path = out_root / "download_stats.yaml"
     with open(summary_path, "w", encoding="utf-8") as f:
         yaml.safe_dump(all_stats, f, sort_keys=False, allow_unicode=True)

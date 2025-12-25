@@ -1,4 +1,3 @@
-# file: scripts/plot_results.py
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,20 +8,16 @@ RUN_ID = ""
 
 def _in_colab() -> bool:
     try:
-        import google.colab  # type: ignore  # noqa: F401
+        import importlib
 
-        return True
+        return importlib.util.find_spec("google.colab") is not None
     except Exception:
         return False
 
-
-# -----------------------------
-# GLOBAL PATHS (edit this file)
-# -----------------------------
 IN_COLAB = _in_colab()
 
 LOCAL_BASE_DIR = "."
-COLAB_BASE_DIR = "/content/drive/MyDrive/research/embfirewall"  # <-- change to your folder on Drive
+COLAB_BASE_DIR = "/content/drive/MyDrive/research/embfirewall"
 
 WORKING_DIR = LOCAL_BASE_DIR
 STORAGE_DIR = COLAB_BASE_DIR if IN_COLAB else LOCAL_BASE_DIR
@@ -31,7 +26,6 @@ RUN_DIR = str(Path(STORAGE_DIR) / "runs" / RUN_ID)
 
 RESULTS_PATH = str(Path(RUN_DIR) / "results.json")
 FIGURES_DIR = str(Path(STORAGE_DIR) / "figures")
-# -----------------------------
 
 
 def main() -> None:

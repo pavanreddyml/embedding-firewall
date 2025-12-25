@@ -73,7 +73,6 @@ def plot_operating_points(results_path: str, out_png: str, fpr_key: str = "0.05"
     plt.savefig(out_png, dpi=200, bbox_inches="tight")
     plt.close()
 
-    # Borderline plot
     plt.figure(figsize=(max(7, len(names) * 0.35), 4))
     plt.bar(x, border)
     plt.xticks(x, names, rotation=75, ha="right", fontsize=7)

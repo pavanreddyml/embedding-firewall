@@ -1,4 +1,3 @@
-# file: embfirewall/embeddings/base.py
 from __future__ import annotations
 
 import time
@@ -10,7 +9,6 @@ from tqdm import tqdm
 
 
 def _l2_normalize(x: np.ndarray, eps: float = 1e-12) -> np.ndarray:
-    # x: (n, d)
     norms = np.linalg.norm(x, axis=1, keepdims=True)
     norms = np.maximum(norms, eps)
     return x / norms
@@ -126,7 +124,7 @@ class Embedder(ABC):
                             vec = vec.reshape(-1).copy()
                             fallback_dim = fallback_dim or int(vec.size)
                             results[idx] = vec.copy()
-                        except Exception as exc:  # pragma: no cover - network/remote failures
+                        except Exception as exc:
                             tqdm.write(
                                 f"[warn] Failed to embed text at index {idx} via {self.type_name()}: {exc}"
                             )

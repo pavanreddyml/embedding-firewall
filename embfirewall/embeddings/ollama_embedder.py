@@ -1,4 +1,3 @@
-# file: embfirewall/embeddings/ollama_embedder.py
 from __future__ import annotations
 
 import json
@@ -56,7 +55,7 @@ class OllamaEmbedder(Embedder):
             payload: Dict[str, str] = {"model": self.model_id, "prompt": t}
             try:
                 resp = requests.post(url, json=payload, timeout=self.request_timeout)
-            except Exception as exc:  # pragma: no cover - network/connection errors
+            except Exception as exc:
                 raise RuntimeError(
                     f"Failed to reach Ollama at {url} (ensure ollama serve is running): {exc}"
                 ) from exc
@@ -79,7 +78,6 @@ class OllamaEmbedder(Embedder):
                 )
             vecs.append(vec)
 
-        # Convert to (n, d)
         first_dim = vecs[0].shape[0]
         arr = np.zeros((len(vecs), first_dim), dtype=np.float32)
         for i, v in enumerate(vecs):
@@ -98,7 +96,7 @@ class OllamaEmbedder(Embedder):
         tags_url = f"{self.base_url}/api/tags"
         try:
             resp = requests.get(tags_url, timeout=self.request_timeout)
-        except Exception as exc:  # pragma: no cover - network/connection errors
+        except Exception as exc:
             raise RuntimeError(
                 f"Failed to reach Ollama at {tags_url} (ensure ollama serve is running): {exc}"
             ) from exc
@@ -106,7 +104,7 @@ class OllamaEmbedder(Embedder):
         if resp.status_code == 200:
             try:
                 models = resp.json().get("models", [])
-            except Exception as exc:  # pragma: no cover - unexpected payload
+            except Exception as exc:
                 raise RuntimeError(
                     f"Invalid response from Ollama tags endpoint for model={self.model_id}: {resp.text}"
                 ) from exc
@@ -126,7 +124,7 @@ class OllamaEmbedder(Embedder):
                 timeout=self.request_timeout,
                 stream=True,
             )
-        except Exception as exc:  # pragma: no cover - network/connection errors
+        except Exception as exc:
             raise RuntimeError(
                 f"Failed to reach Ollama at {pull_url} (ensure ollama serve is running): {exc}"
             ) from exc

@@ -1,4 +1,3 @@
-# file: embfirewall/viz.py
 from __future__ import annotations
 
 import csv
@@ -20,7 +19,7 @@ def _run_label(r: Dict[str, Any]) -> str:
 def _finite(v: Any) -> Optional[float]:
     try:
         x = float(v)
-        if x != x:  # NaN
+        if x != x:
             return None
         return x
     except Exception:
@@ -49,7 +48,6 @@ def _collect_rows(res: Dict[str, Any]) -> List[Dict[str, Any]]:
             "latency_detector_s": _finite((r.get("latency_s") or {}).get("detector")),
         }
 
-        # operating points (flatten)
         if isinstance(op, dict):
             for k, v in op.items():
                 if not isinstance(v, dict):
@@ -68,7 +66,6 @@ def write_summary_csv(results_path: str, out_csv: str) -> None:
     if not rows:
         return
 
-    # stable column order
     cols = ["label", "type", "embedding", "detector", "auroc", "auprc", "latency_total_s", "latency_detector_s"]
     extra_cols = sorted({k for row in rows for k in row.keys() if k not in cols})
     cols = cols + extra_cols
@@ -130,7 +127,6 @@ def plot_operating_points(results_path: str, out_dir: str, fpr_key: str) -> None
     out_dir_p = Path(out_dir)
     out_dir_p.mkdir(parents=True, exist_ok=True)
 
-    # TPR bar
     plt.figure(figsize=(max(7, len(labels) * 0.35), 4))
     plt.bar(x, tprs)
     plt.xticks(x, labels, rotation=75, ha="right", fontsize=7)
@@ -139,7 +135,6 @@ def plot_operating_points(results_path: str, out_dir: str, fpr_key: str) -> None
     plt.savefig(str(out_dir_p / f"tpr_at_fpr_{fpr_key}.png"), dpi=200, bbox_inches="tight")
     plt.close()
 
-    # Borderline bar
     plt.figure(figsize=(max(7, len(labels) * 0.35), 4))
     plt.bar(x, bdrs)
     plt.xticks(x, labels, rotation=75, ha="right", fontsize=7)
@@ -242,7 +237,6 @@ def write_all_figures(results_path: str, figures_dir: str) -> None:
     figdir = Path(figures_dir)
     figdir.mkdir(parents=True, exist_ok=True)
 
-    # Paper-ish essentials
     plot_metric_bar(results_path, str(figdir / "auroc_top.png"), "auroc", top_k=25)
     plot_metric_bar(results_path, str(figdir / "auprc_top.png"), "auprc", top_k=25)
 

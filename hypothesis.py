@@ -1,4 +1,3 @@
-# file: hypothesis.py
 """
 Diagnostic script to probe why unsupervised AUROC can look bad when supervised models do well.
 
@@ -49,12 +48,11 @@ from run_eval import (
     _parse_embeddings,
 )
 
-os.environ["HYPOTHESIS_DATASETS"] = ",".join(["jigsaw"])  # Example of setting datasets to run
-
-# Optional: limit which dataset folders to run. Accepts exact folder names under DATA_DIR.
-RUN_DATASETS: list[str] = os.environ.get("HYPOTHESIS_DATASETS", "").split(",")
-RUN_DATASETS = [ds.strip() for ds in RUN_DATASETS if ds.strip()]
-RUN_DATASETS - None if len(RUN_DATASETS) == 0 else RUN_DATASETS
+RUN_DATASETS_ENV = os.environ.get("HYPOTHESIS_DATASETS", "")
+RUN_DATASETS: list[str] | None = None
+if RUN_DATASETS_ENV:
+    parsed_datasets = [ds.strip() for ds in RUN_DATASETS_ENV.split(",") if ds.strip()]
+    RUN_DATASETS = parsed_datasets or None
 
 
 def _cache_key(emb_spec) -> str:
@@ -234,7 +232,7 @@ def _build_runner(eval_cfg: dict, data_dir: str, run_dir: str, dataset_name: str
         normal_label=meta["normal_label"],
         borderline_label=meta["borderline_label"],
         malicious_label=meta["malicious_label"],
-        fpr_points=fpr_points_t,  # type: ignore[arg-type]
+        fpr_points=fpr_points_t,
         embedding_models=embeddings,
         enable_keyword=enable_keyword,
         enable_unsupervised=enable_unsup,
@@ -483,7 +481,6 @@ def _evaluate_with_sweep(runner: ExperimentRunner, cache: EmbeddingCache) -> Non
                     det_type = _detector_type_name(spec)
                     for metric_tag, metric_value in _metric_grid_for_detector(det_type):
                         if det_type == "mahalanobis" and prep_name == "l2":
-                            # Mahalanobis should stay in raw/standardized spaces unless explicitly ablated
                             continue
                         cfg = _normalize_detector_spec(spec)
                         display_metric = metric_tag

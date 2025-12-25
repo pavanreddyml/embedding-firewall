@@ -1,4 +1,3 @@
-# file: embfirewall/detectors/__init__.py
 from .base import Detector
 from .ensemble import EnsembleDetector
 from .factory import build_detector

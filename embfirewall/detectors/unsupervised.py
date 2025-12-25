@@ -1,4 +1,3 @@
-# file: embfirewall/detectors/unsupervised.py
 from __future__ import annotations
 
 from typing import Iterable, List, Optional, Sequence, Tuple, Union
@@ -34,7 +33,6 @@ class CentroidDistance(Detector):
         if self.centroid_ is None:
             raise RuntimeError("CentroidDistance not fitted")
         if self.metric == "dot":
-            # Negative dot product so that higher => more anomalous (lower similarity)
             return -np.dot(X, self.centroid_).reshape(-1)
         if self.metric in ("euclidean", "l2"):
             diff = X - self.centroid_[None, :]
@@ -107,7 +105,6 @@ class OneClassSVMDetector(Detector):
     def score(self, X: np.ndarray) -> np.ndarray:
         if self.model_ is None:
             raise RuntimeError("OneClassSVMDetector not fitted")
-        # decision_function: + for inliers, - for outliers => negate
         return -self.model_.decision_function(X).reshape(-1)
 
 
@@ -122,7 +119,6 @@ class IsolationForestDetector(Detector):
         name: str = "iforest",
         **_ignored: object,
     ) -> None:
-        # **_ignored keeps backward-compat if configs pass extra keys (won't crash)
         super().__init__(name=name)
         self.n_estimators = int(n_estimators)
         self.max_samples = max_samples
@@ -145,7 +141,6 @@ class IsolationForestDetector(Detector):
     def score(self, X: np.ndarray) -> np.ndarray:
         if self.model_ is None:
             raise RuntimeError("IsolationForestDetector not fitted")
-        # score_samples: higher => more normal, so negate
         return -self.model_.score_samples(X).reshape(-1)
 
 
@@ -169,7 +164,6 @@ class MahalanobisDistance(Detector):
         if self.mean_ is None or self.precision_ is None:
             raise RuntimeError("MahalanobisDistance not fitted")
         diff = X - self.mean_[None, :]
-        # squared Mahalanobis distance
         m = np.einsum("ij,jk,ik->i", diff, self.precision_, diff)
         return m.reshape(-1)
 
@@ -204,7 +198,6 @@ class LocalOutlierFactorDetector(Detector):
     def score(self, X: np.ndarray) -> np.ndarray:
         if self.model_ is None:
             raise RuntimeError("LocalOutlierFactorDetector not fitted")
-        # decision_function: + inlier, - outlier => negate
         return -self.model_.decision_function(X).reshape(-1)
 
 
@@ -278,7 +271,6 @@ class GaussianMixtureEnergy(Detector):
     def score(self, X: np.ndarray) -> np.ndarray:
         if self.model_ is None:
             raise RuntimeError("GaussianMixtureEnergy not fitted")
-        # GaussianMixture.score_samples returns per-sample log-likelihood; negate for energy-style anomaly score
         return -self.model_.score_samples(X).reshape(-1)
 
 
@@ -610,7 +602,6 @@ class GANDiscriminatorDetector(Detector):
 
         for _ in range(self.epochs):
             for (real,) in loader:
-                # Train discriminator
                 opt_d.zero_grad()
                 noise = torch.randn(real.size(0), self.noise_dim, device=self.device_)
                 fake = self.gen_(noise).detach()
@@ -620,7 +611,6 @@ class GANDiscriminatorDetector(Detector):
                 loss_d.backward()
                 opt_d.step()
 
-                # Train generator
                 opt_g.zero_grad()
                 noise = torch.randn(real.size(0), self.noise_dim, device=self.device_)
                 fake = self.gen_(noise)

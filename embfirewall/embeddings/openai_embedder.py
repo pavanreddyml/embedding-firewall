@@ -1,4 +1,3 @@
-# file: embfirewall/embeddings/openai_embedder.py
 from __future__ import annotations
 
 import os
@@ -18,7 +17,7 @@ def _build_token_counter(model_id: str) -> Callable[[str], int]:
     - Fallback: ~4 chars/token heuristic
     """
     try:
-        import tiktoken  # type: ignore
+        import tiktoken
 
         try:
             enc = tiktoken.encoding_for_model(model_id)
@@ -32,7 +31,6 @@ def _build_token_counter(model_id: str) -> Callable[[str], int]:
     except Exception:
 
         def _count(s: str) -> int:
-            # conservative-ish heuristic
             return max(1, (len(s) + 3) // 4)
 
         return _count
@@ -98,7 +96,6 @@ class OpenAIEmbedder(Embedder):
         project: Optional[str] = None,
         dimensions: Optional[int] = None,
         max_retries: int = 6,
-        # Rate limit (TPM). Default: 100k tokens/minute.
         rate_limit_tpm: int = 100_000,
         rate_limit_window_s: float = 60.0,
     ) -> None:
@@ -116,8 +113,7 @@ class OpenAIEmbedder(Embedder):
         if not api_key:
             raise RuntimeError(f"Missing API key env var: {self.api_key_env}")
 
-        # openai>=1.x
-        from openai import OpenAI  # type: ignore
+        from openai import OpenAI
 
         self.client = OpenAI(
             api_key=api_key,
@@ -145,7 +141,6 @@ class OpenAIEmbedder(Embedder):
         inp = list(texts)
 
         kwargs: Dict = {"model": self.model_id, "input": inp}
-        # Only supported by newer embedding models; harmless if rejected (we retry w/out).
         if self.dimensions is not None:
             kwargs["dimensions"] = self.dimensions
 
@@ -163,7 +158,6 @@ class OpenAIEmbedder(Embedder):
                 return arr
             except Exception as e:
                 last_err = e
-                # If dimensions caused an error, retry once without it.
                 if "dimensions" in kwargs:
                     kwargs.pop("dimensions", None)
                 sleep_s = min(8.0, 0.5 * (2**attempt))
