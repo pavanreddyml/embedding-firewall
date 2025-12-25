@@ -497,9 +497,12 @@ def _evaluate_with_sweep(runner: ExperimentRunner, cache: EmbeddingCache) -> Non
                             )
                         disp_name = f"{tuned_cfg.get('name', cfg['name'])}[{prep_name}|{display_metric}]"
                         det = build_detector(tuned_cfg)
-                        det.fit(X_train)
-                        scores_test = det.score(X_test)
-                        unsup_results.append(_collect_summary(disp_name, scores_test, runner))
+                        try:
+                            det.fit(X_train)
+                            scores_test = det.score(X_test)
+                            unsup_results.append(_collect_summary(disp_name, scores_test, runner))
+                        finally:
+                            det.close()
 
             if runner.cfg.enable_supervised and runner.cfg.supervised_detectors:
                 for spec in runner.cfg.supervised_detectors:
@@ -519,9 +522,12 @@ def _evaluate_with_sweep(runner: ExperimentRunner, cache: EmbeddingCache) -> Non
                         )
                     disp_name = f"{tuned_cfg.get('name', cfg['name'])}[{prep_name}|default]"
                     det = build_detector(tuned_cfg)
-                    det.fit(X_val[runner.sup_fit_idx], runner.val_y[runner.sup_fit_idx])
-                    scores_test = det.score(X_test)
-                    sup_results.append(_collect_summary(disp_name, scores_test, runner))
+                    try:
+                        det.fit(X_val[runner.sup_fit_idx], runner.val_y[runner.sup_fit_idx])
+                        scores_test = det.score(X_test)
+                        sup_results.append(_collect_summary(disp_name, scores_test, runner))
+                    finally:
+                        det.close()
 
             if unsup_results:
                 _print_block("[unsupervised]", unsup_results)
@@ -613,9 +619,12 @@ def run_diagnostic(eval_config: str, data_dir: str, run_dir: str, *, enable_rep_
                                     f"[hypothesis] tuned unsup {tuned_name} trials={tried} metric={metric_disp}"
                                 )
                             det = build_detector(tuned_spec)
-                            det.fit(X_train)
-                            scores_test = det.score(X_test)
-                            _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
+                            try:
+                                det.fit(X_train)
+                                scores_test = det.score(X_test)
+                                _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
+                            finally:
+                                det.close()
 
                     if runner.cfg.enable_supervised and runner.cfg.supervised_detectors:
                         print("\n[supervised]")
@@ -634,9 +643,12 @@ def run_diagnostic(eval_config: str, data_dir: str, run_dir: str, *, enable_rep_
                                     f"[hypothesis] tuned sup {tuned_name} trials={tried} metric={metric_disp}"
                                 )
                             det = build_detector(tuned_spec)
-                            det.fit(X_val[runner.sup_fit_idx], runner.val_y[runner.sup_fit_idx])
-                            scores_test = det.score(X_test)
-                            _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
+                            try:
+                                det.fit(X_val[runner.sup_fit_idx], runner.val_y[runner.sup_fit_idx])
+                                scores_test = det.score(X_test)
+                                _summarize_detector(det_name=det.name, scores_test=scores_test, runner=runner)
+                            finally:
+                                det.close()
     finally:
         cache.flush_all()
 

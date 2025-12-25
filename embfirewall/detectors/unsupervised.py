@@ -300,6 +300,22 @@ def _to_tensor(x: np.ndarray, device: torch.device) -> torch.Tensor:
     return torch.as_tensor(x, dtype=torch.float32, device=device)
 
 
+def _cleanup_torch(device: Optional[torch.device], *modules: Optional[nn.Module]) -> None:
+    for module in modules:
+        if module is None:
+            continue
+        try:
+            module.cpu()
+        except Exception:
+            pass
+
+    if device is not None and device.type == "cuda" and torch.cuda.is_available():
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+
+
 class _AutoencoderNet(nn.Module):
     def __init__(
         self,
@@ -396,6 +412,11 @@ class AutoencoderDetector(Detector):
                 err = torch.sum((batch - recon) ** 2, dim=1)
                 scores.append(err.cpu().numpy())
         return np.concatenate(scores, axis=0)
+
+    def close(self) -> None:
+        _cleanup_torch(self.device_, self.model_)
+        self.model_ = None
+        self.device_ = None
 
 
 class _VAENet(nn.Module):
@@ -512,6 +533,11 @@ class VariationalAutoencoderDetector(Detector):
                 kl = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=1)
                 scores.append((recon_err + self.beta * kl).cpu().numpy())
         return np.concatenate(scores, axis=0)
+
+    def close(self) -> None:
+        _cleanup_torch(self.device_, self.model_)
+        self.model_ = None
+        self.device_ = None
 
 
 class _Discriminator(nn.Module):
@@ -639,3 +665,9 @@ class GANDiscriminatorDetector(Detector):
                 prob_real = torch.sigmoid(logits).squeeze(dim=1)
                 scores.append((1.0 - prob_real).cpu().numpy())
         return np.concatenate(scores, axis=0)
+
+    def close(self) -> None:
+        _cleanup_torch(self.device_, self.disc_, self.gen_)
+        self.disc_ = None
+        self.gen_ = None
+        self.device_ = None
