@@ -54,3 +54,24 @@ class SentenceTransformerEmbedder(Embedder):
             normalize_embeddings=False,
         )
         return np.asarray(emb, dtype=np.float32)
+
+    def close(self) -> None:
+        try:
+            import torch
+        except Exception:
+            torch = None
+
+        model = getattr(self, "model", None)
+        if model is not None:
+            try:
+                model.to("cpu")
+            except Exception:
+                pass
+        self.model = None
+
+        if torch is not None:
+            try:
+                if str(self.device).startswith("cuda") and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass

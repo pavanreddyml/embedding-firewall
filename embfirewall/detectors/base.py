@@ -23,3 +23,6 @@ class Detector(ABC):
     @abstractmethod
     def score(self, X: np.ndarray) -> np.ndarray:
         raise NotImplementedError
+
+    def close(self) -> None:
+        return None

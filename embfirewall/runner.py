@@ -406,10 +406,13 @@ class ExperimentRunner:
 
         best_spec = dict(base_spec)
         det = build_detector(best_spec)
-        det.fit(X_train)
-        base_scores_val = det.score(X_val)
-        best_metric = self._metric_value(self.val_y, base_scores_val)
-        tried = 1
+        try:
+            det.fit(X_train)
+            base_scores_val = det.score(X_val)
+            best_metric = self._metric_value(self.val_y, base_scores_val)
+            tried = 1
+        finally:
+            det.close()
 
         print(
             f"[runner] random search unsup base {best_spec.get('name', best_spec.get('type'))}: "
@@ -422,6 +425,7 @@ class ExperimentRunner:
                 f"[runner] random search unsup trial {idx + 1}/{trials} "
                 f"{candidate.get('name', candidate.get('type'))}: {self._fmt_spec(candidate)}"
             )
+            det_c: Optional[Detector] = None
             try:
                 det_c = build_detector(candidate)
                 det_c.fit(X_train)
@@ -434,6 +438,9 @@ class ExperimentRunner:
             except Exception as exc:
                 print(f"[runner] random search unsup failed for {candidate}: {exc}")
                 continue
+            finally:
+                if det_c is not None:
+                    det_c.close()
 
         return best_spec, best_metric, tried
 
@@ -454,10 +461,13 @@ class ExperimentRunner:
 
         best_spec = dict(base_spec)
         det = build_detector(best_spec)
-        det.fit(X_fit, y_fit)
-        base_scores_val = det.score(X_val)
-        best_metric = self._metric_value(y_val, base_scores_val)
-        tried = 1
+        try:
+            det.fit(X_fit, y_fit)
+            base_scores_val = det.score(X_val)
+            best_metric = self._metric_value(y_val, base_scores_val)
+            tried = 1
+        finally:
+            det.close()
 
         print(
             f"[runner] random search sup base {best_spec.get('name', best_spec.get('type'))}: "
@@ -470,6 +480,7 @@ class ExperimentRunner:
                 f"[runner] random search sup trial {idx + 1}/{trials} "
                 f"{candidate.get('name', candidate.get('type'))}: {self._fmt_spec(candidate)}"
             )
+            det_c: Optional[Detector] = None
             try:
                 det_c = build_detector(candidate)
                 det_c.fit(X_fit, y_fit)
@@ -482,6 +493,9 @@ class ExperimentRunner:
             except Exception as exc:
                 print(f"[runner] random search sup failed for {candidate}: {exc}")
                 continue
+            finally:
+                if det_c is not None:
+                    det_c.close()
 
         return best_spec, best_metric, tried
 
@@ -489,7 +503,10 @@ class ExperimentRunner:
         t0_total = time.time()
 
         embedder = build_embedder(emb_spec)
-        X, dt_embed = embedder.embed(texts, desc=f"embed[{emb_spec.name}]")
+        try:
+            X, dt_embed = embedder.embed(texts, desc=f"embed[{emb_spec.name}]")
+        finally:
+            embedder.close()
 
         dt_total = time.time() - t0_total
         return X, float(dt_total)
