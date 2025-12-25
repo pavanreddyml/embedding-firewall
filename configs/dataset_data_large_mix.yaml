@@ -70,14 +70,6 @@ labels:
         max_rows: 50000
 
       - kind: hf
-        name: xsum_document_normal_50k
-        dataset: EdinburghNLP/xsum
-        split: train
-        streaming: true
-        text_field: document
-        max_rows: 50000
-
-      - kind: hf
         name: wildguardmix_vanilla_unharmful_normal_50k
         dataset: allenai/wildguardmix
         subset: wildguardtrain
@@ -195,16 +187,6 @@ labels:
             label: 1
         max_rows: 5000
 
-      - kind: hf
-        name: social_bias_frames_maybe_offensive_borderline_5k
-        dataset: allenai/social_bias_frames
-        split: train
-        streaming: true
-        text_field: post
-        filters:
-          eq:
-            offensiveYN: "0.5"
-        max_rows: 5000
 
       - kind: hf
         name: wildguardmix_adversarial_unharmful_borderline_5k
@@ -320,16 +302,6 @@ labels:
             label: 0
         max_rows: 5000
 
-      - kind: hf
-        name: social_bias_frames_offensive_malicious_5k
-        dataset: allenai/social_bias_frames
-        split: train
-        streaming: true
-        text_field: post
-        filters:
-          eq:
-            offensiveYN: "1.0"
-        max_rows: 5000
 
       - kind: hf
         name: wildguardmix_harmful_adversarial_malicious_5k
