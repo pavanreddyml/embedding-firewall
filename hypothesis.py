@@ -54,6 +54,12 @@ if RUN_DATASETS_ENV:
     parsed_datasets = [ds.strip() for ds in RUN_DATASETS_ENV.split(",") if ds.strip()]
     RUN_DATASETS = parsed_datasets or None
 
+MODEL_RUNTIME_TYPE = os.environ.get("MODEL_RUNTIME_TYPE", "both").strip().lower()
+if MODEL_RUNTIME_TYPE not in {"cpu", "gpu", "both"}:
+    raise SystemExit(
+        f"[hypothesis] MODEL_RUNTIME_TYPE must be one of 'cpu', 'gpu', or 'both'; got: {MODEL_RUNTIME_TYPE}"
+    )
+
 
 def _cache_key(emb_spec) -> str:
     return str(emb_spec.model_id)
@@ -213,8 +219,8 @@ def _build_runner(eval_cfg: dict, data_dir: str, run_dir: str, dataset_name: str
     enable_unsup = bool(det_cfg.get("enable_unsupervised", True))
     enable_sup = bool(det_cfg.get("enable_supervised", True))
     enable_random_search = bool(det_cfg.get("enable_random_search", True))
-    unsup_list = det_cfg.get("unsupervised")
-    sup_list = det_cfg.get("supervised")
+    unsup_list = _filter_detectors_by_runtime(det_cfg.get("unsupervised"))
+    sup_list = _filter_detectors_by_runtime(det_cfg.get("supervised"))
 
     embeddings = _parse_embeddings(eval_cfg)
     enable_random_search_for_embeds = enable_random_search and any(
@@ -350,6 +356,28 @@ def _detector_type_name(spec: str | dict) -> str:
     if t in ("ensemble", "blend", "aggregate"):
         return "ensemble"
     return t
+
+
+def _detector_runtime(spec: str | dict) -> str:
+    det_type = _detector_type_name(spec)
+    if det_type in {"autoencoder", "vae", "gan"}:
+        return "gpu"
+    return "cpu"
+
+
+def _filter_detectors_by_runtime(detectors: list[str | dict] | None) -> list[str | dict] | None:
+    if detectors is None:
+        return None
+    if MODEL_RUNTIME_TYPE == "both":
+        return detectors
+
+    filtered = [d for d in detectors if _detector_runtime(d) == MODEL_RUNTIME_TYPE]
+    skipped = len(detectors) - len(filtered)
+    if skipped:
+        print(
+            f"[hypothesis] MODEL_RUNTIME_TYPE={MODEL_RUNTIME_TYPE}: filtered {skipped} detector(s) out of {len(detectors)}"
+        )
+    return filtered
 
 
 def _metric_grid_for_detector(det_type: str) -> Sequence[Tuple[str, str]]:

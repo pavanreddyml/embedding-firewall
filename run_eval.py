@@ -38,6 +38,12 @@ RUN_ID = "demo_run"
 RUN_MODEL_IDS: list[str] = []
 RUN_DATASETS: list[str] = _parse_dataset_env(os.environ.get("RUN_DATASETS"))
 
+MODEL_RUNTIME_TYPE = os.environ.get("MODEL_RUNTIME_TYPE", "both").strip().lower()
+if MODEL_RUNTIME_TYPE not in {"cpu", "gpu", "both"}:
+    raise SystemExit(
+        f"[run] MODEL_RUNTIME_TYPE must be one of 'cpu', 'gpu', or 'both'; got: {MODEL_RUNTIME_TYPE}"
+    )
+
 CHEAP_EMBED_KINDS = {"st", "ollama"}
 CHEAP_RANDOM_SEARCH_TRIALS = 12
 
@@ -177,6 +183,64 @@ def _load_test(
     )
 
 
+def _detector_type_name(spec: str | dict) -> str:
+    t = spec if isinstance(spec, str) else spec.get("type", "")
+    t = str(t).lower().strip()
+    if t in ("centroid", "mean", "l2"):
+        return "centroid"
+    if t == "knn":
+        return "knn"
+    if t in ("ocsvm", "oneclasssvm", "one_class_svm"):
+        return "ocsvm"
+    if t in ("iforest", "isolationforest", "isolation_forest"):
+        return "iforest"
+    if t in ("mahal", "mahalanobis"):
+        return "mahalanobis"
+    if t in ("lof", "localoutlierfactor", "local_outlier_factor"):
+        return "lof"
+    if t in ("pca", "pca_recon", "pca_reconstruction"):
+        return "pca"
+    if t in ("gmm", "gmm_energy", "gaussian_mixture"):
+        return "gmm"
+    if t in ("ae", "autoencoder"):
+        return "autoencoder"
+    if t in ("vae", "variational_autoencoder"):
+        return "vae"
+    if t in ("gan", "gan_detector", "gan_disc", "gan_discriminator"):
+        return "gan"
+    if t in ("logreg", "logisticregression", "logistic_regression"):
+        return "logreg"
+    if t in ("linsvm", "linear_svm", "linsvm_calibrated"):
+        return "linsvm"
+    if t in ("hgbt", "histgradientboosting", "hist_gbt", "gradient_boosting"):
+        return "hgbt"
+    if t in ("ensemble", "blend", "aggregate"):
+        return "ensemble"
+    return t
+
+
+def _detector_runtime(spec: str | dict) -> str:
+    det_type = _detector_type_name(spec)
+    if det_type in {"autoencoder", "vae", "gan"}:
+        return "gpu"
+    return "cpu"
+
+
+def _filter_detectors_by_runtime(detectors: list[str | dict] | None) -> list[str | dict] | None:
+    if detectors is None:
+        return None
+    if MODEL_RUNTIME_TYPE == "both":
+        return detectors
+
+    filtered = [d for d in detectors if _detector_runtime(d) == MODEL_RUNTIME_TYPE]
+    skipped = len(detectors) - len(filtered)
+    if skipped:
+        print(
+            f"[run] MODEL_RUNTIME_TYPE={MODEL_RUNTIME_TYPE}: filtered {skipped} detector(s) out of {len(detectors)}"
+        )
+    return filtered
+
+
 def run_eval(
     eval_config: str = EVAL_CONFIG_PATH,
     runs_dir: str = RUNS_DIR,
@@ -277,8 +341,8 @@ def run_eval(
     enable_unsup = bool(det_cfg.get("enable_unsupervised", True))
     enable_sup = bool(det_cfg.get("enable_supervised", True))
     enable_random_search = bool(det_cfg.get("enable_random_search", True))
-    unsup_list = det_cfg.get("unsupervised")
-    sup_list = det_cfg.get("supervised")
+    unsup_list = _filter_detectors_by_runtime(det_cfg.get("unsupervised"))
+    sup_list = _filter_detectors_by_runtime(det_cfg.get("supervised"))
     unsup_pos_labels_t = (malicious_label, borderline_label)
 
     for dataset_name, dataset_dir in dataset_dirs:
@@ -331,10 +395,17 @@ def run_eval(
         for emb_spec in embeddings:
             model_dir_name = emb_spec.model_id.replace("/", "_")
             model_run_dir = dataset_run_dir / model_dir_name
+            results_path = model_run_dir / "results.json"
+
+            if results_path.exists():
+                print(
+                    f"[run] Skipping model_id={emb_spec.model_id} for dataset={dataset_name}; results already exist"
+                )
+                continue
 
             if model_run_dir.exists():
                 print(
-                    f"[run] Existing results for model_id={emb_spec.model_id} at {model_run_dir}, deleting for rerun"
+                    f"[run] Removing partial/old run directory for model_id={emb_spec.model_id} at {model_run_dir}"
                 )
                 shutil.rmtree(model_run_dir)
 
