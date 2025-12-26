@@ -20,19 +20,19 @@ fpr_points: [0.05, 0.10]
 keyword_baseline:
   enabled: true
   # Optional override; if omitted, code uses DEFAULT_PATTERNS in embfirewall/detectors/keywords.py
-  # patterns:
-  #   - "ignore\\s+all\\s+previous"
-  #   - "forget\\s+all\\s+previous"
-  #   - "system\\s+prompt"
-  #   - "developer\\s+message"
-  #   - "jailbreak"
-  #   - "do\\s+anything\\s+now"
-  #   - "DAN\\b"
-  #   - "reveal\\s+the\\s+prompt"
-  #   - "bypass"
-  #   - "policy"
-  #   - "rules"
-  #   - "confidential"
+  patterns:
+    - "ignore\\s+all\\s+previous"
+    - "forget\\s+all\\s+previous"
+    - "system\\s+prompt"
+    - "developer\\s+message"
+    - "jailbreak"
+    - "do\\s+anything\\s+now"
+    - "DAN\\b"
+    - "reveal\\s+the\\s+prompt"
+    - "bypass"
+    - "policy"
+    - "rules"
+    - "confidential"
 
 embeddings:
   # Hugging Face sentence-transformer models (min 10k context windows) ordered from average to amazing.
@@ -144,7 +144,7 @@ embeddings:
 detectors:
   enable_unsupervised: true
   enable_supervised: true
-  enable_random_search: false
+  enable_random_search: true
   # Unsupervised metrics treat these labels as positive (primary Recipe 1 run)
   # Borderline data in all provided datasets is adversarial/unsafe-ish, so we
   # include it as positive by default.
@@ -154,117 +154,117 @@ detectors:
   unsupervised:
     - type: centroid
 
-    # - type: knn
-    #   k: 5
-    #   name: knn5
+    - type: knn
+      k: 5
+      name: knn5
 
-    # - type: knn
-    #   k: 10
-    #   name: knn10
+    - type: knn
+      k: 10
+      name: knn10
 
-    # - type: ocsvm
-    #   nu: 0.05
-    #   gamma: scale
-    #   name: ocsvm
+    - type: ocsvm
+      nu: 0.05
+      gamma: scale
+      name: ocsvm
 
-    # - type: iforest
-    #   contamination: 0.05
-    #   n_estimators: 200
-    #   random_state: 7
-    #   name: iforest
+    - type: iforest
+      contamination: 0.05
+      n_estimators: 200
+      random_state: 7
+      name: iforest
 
-    # - type: mahalanobis
-    #   name: mahal
+    - type: mahalanobis
+      name: mahal
 
-    # - type: lof
-    #   n_neighbors: 35
-    #   name: lof35
+    - type: lof
+      n_neighbors: 35
+      name: lof35
 
-    # - type: pca
-    #   n_components: 64
-    #   name: pca64
+    - type: pca
+      n_components: 64
+      name: pca64
 
-    # - type: gmm
-    #   n_components: 12
-    #   covariance_type: full
-    #   reg_covar: 1.0e-3
-    #   max_iter: 400
-    #   random_state: 7
-    #   name: gmm_energy
+    - type: gmm
+      n_components: 12
+      covariance_type: full
+      reg_covar: 1.0e-3
+      max_iter: 400
+      random_state: 7
+      name: gmm_energy
 
-    # - type: ensemble
-    #   name: ens_distance_mean
-    #   aggregation: mean
-    #   members:
-    #     - type: centroid
-    #     - type: mahalanobis
-    #     - type: knn
-    #       k: 10
-    #       name: knn10
+    - type: ensemble
+      name: ens_distance_mean
+      aggregation: mean
+      members:
+        - type: centroid
+        - type: mahalanobis
+        - type: knn
+          k: 10
+          name: knn10
 
-    # - type: ensemble
-    #   name: ens_density_max
-    #   aggregation: max
-    #   members:
-    #     - type: gmm
-    #       n_components: 12
-    #       covariance_type: full
-    #       reg_covar: 1.0e-3
-    #       max_iter: 400
-    #       random_state: 7
-    #       name: gmm_energy
-    #     - type: iforest
-    #       contamination: 0.05
-    #       n_estimators: 200
-    #       random_state: 7
-    #       name: iforest
-    #     - type: lof
-    #       n_neighbors: 35
-    #       name: lof35
+    - type: ensemble
+      name: ens_density_max
+      aggregation: max
+      members:
+        - type: gmm
+          n_components: 12
+          covariance_type: full
+          reg_covar: 1.0e-3
+          max_iter: 400
+          random_state: 7
+          name: gmm_energy
+        - type: iforest
+          contamination: 0.05
+          n_estimators: 200
+          random_state: 7
+          name: iforest
+        - type: lof
+          n_neighbors: 35
+          name: lof35
 
-    # - type: ensemble
-    #   name: ens_recon_median
-    #   aggregation: median
-    #   members:
-    #     - type: pca
-    #       n_components: 64
-    #       name: pca64
-    #     - type: autoencoder
-    #       hidden_dims: [512, 256]
-    #       latent_dim: 128
-    #       epochs: 30
-    #       batch_size: 256
-    #       name: autoencoder
-    #     - type: vae
-    #       hidden_dims: [512, 256]
-    #       latent_dim: 128
-    #       epochs: 40
-    #       beta: 1.0
-    #       batch_size: 256
-    #       name: vae
+    - type: ensemble
+      name: ens_recon_median
+      aggregation: median
+      members:
+        - type: pca
+          n_components: 64
+          name: pca64
+        - type: autoencoder
+          hidden_dims: [512, 256]
+          latent_dim: 128
+          epochs: 30
+          batch_size: 256
+          name: autoencoder
+        - type: vae
+          hidden_dims: [512, 256]
+          latent_dim: 128
+          epochs: 40
+          beta: 1.0
+          batch_size: 256
+          name: vae
 
-    # - type: autoencoder
-    #   hidden_dims: [512, 256]
-    #   latent_dim: 128
-    #   epochs: 30
-    #   batch_size: 256
-    #   name: autoencoder
+    - type: autoencoder
+      hidden_dims: [512, 256]
+      latent_dim: 128
+      epochs: 30
+      batch_size: 256
+      name: autoencoder
 
-    # - type: vae
-    #   hidden_dims: [512, 256]
-    #   latent_dim: 128
-    #   epochs: 40
-    #   beta: 1.0
-    #   batch_size: 256
-    #   name: vae
+    - type: vae
+      hidden_dims: [512, 256]
+      latent_dim: 128
+      epochs: 40
+      beta: 1.0
+      batch_size: 256
+      name: vae
 
-    # - type: gan
-    #   hidden_dims: [512, 256]
-    #   noise_dim: 128
-    #   epochs: 40
-    #   batch_size: 256
-    #   feature_match_weight: 5.0
-    #   name: gan
+    - type: gan
+      hidden_dims: [512, 256]
+      noise_dim: 128
+      epochs: 40
+      batch_size: 256
+      feature_match_weight: 5.0
+      name: gan
 
   supervised:
     - type: logreg
@@ -272,33 +272,33 @@ detectors:
       max_iter: 2000
       name: logreg_default
 
-    # - type: logreg
-    #   C: 0.3
-    #   max_iter: 2000
-    #   name: logreg_C0.3
+    - type: logreg
+      C: 0.3
+      max_iter: 2000
+      name: logreg_C0.3
 
-    # - type: logreg
-    #   C: 3.0
-    #   max_iter: 2000
-    #   name: logreg_C3
+    - type: logreg
+      C: 3.0
+      max_iter: 2000
+      name: logreg_C3
 
-    # - type: logreg
-    #   C: 0.3
-    #   max_iter: 4000
-    #   class_weight: balanced
-    #   name: logreg_balanced
+    - type: logreg
+      C: 0.3
+      max_iter: 4000
+      class_weight: balanced
+      name: logreg_balanced
 
-    # - type: linsvm
-    #   C: 1.5
-    #   max_iter: 8000
-    #   class_weight: balanced
-    #   calibration_cv: 5
-    #   calibration_method: sigmoid
-    #   name: linsvm_calibrated
+    - type: linsvm
+      C: 1.5
+      max_iter: 8000
+      class_weight: balanced
+      calibration_cv: 5
+      calibration_method: sigmoid
+      name: linsvm_calibrated
 
-    # - type: hgbt
-    #   learning_rate: 0.06
-    #   max_depth: 10
-    #   max_iter: 450
-    #   l2_regularization: 0.1
-    #   name: hgbt
+    - type: hgbt
+      learning_rate: 0.06
+      max_depth: 10
+      max_iter: 450
+      l2_regularization: 0.1
+      name: hgbt
