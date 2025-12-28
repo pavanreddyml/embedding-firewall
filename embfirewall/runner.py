@@ -13,6 +13,7 @@ from tqdm import tqdm
 from .detectors import DEFAULT_PATTERNS, KeywordBaseline
 from .detectors.factory import build_detector
 from .embeddings import EmbeddingSpec, build_embedder
+from .embeddings.cache import EmbeddingCache
 from .viz import write_all_figures
 
 
@@ -185,9 +186,12 @@ def _wilson_ci(k: int, n: int, z: float = 1.96) -> Tuple[float, float]:
 
 
 class ExperimentRunner:
-    def __init__(self, cfg: RunConfig, data: DatasetSlices):
+    def __init__(
+        self, cfg: RunConfig, data: DatasetSlices, cache: EmbeddingCache | None = None
+    ):
         self.cfg = cfg
         self.data = data
+        self.cache = cache
 
         self.rng = np.random.RandomState(cfg.random_search_seed)
 
@@ -502,14 +506,53 @@ class ExperimentRunner:
     def _embed(self, emb_spec: EmbeddingSpec, texts: List[str]) -> Tuple[np.ndarray, float]:
         t0_total = time.time()
 
-        embedder = build_embedder(emb_spec)
-        try:
-            X, dt_embed = embedder.embed(texts, desc=f"embed[{emb_spec.name}]")
-        finally:
-            embedder.close()
+        if self.cache is None:
+            embedder = build_embedder(emb_spec)
+            try:
+                X, _ = embedder.embed(texts, desc=f"embed[{emb_spec.name}]")
+            finally:
+                embedder.close()
+            dt_total = time.time() - t0_total
+            return X, float(dt_total)
+
+        if not texts:
+            return np.empty((0, 0), dtype=np.float32), 0.0
+
+        model_key = str(emb_spec.model_id)
+        cached: List[np.ndarray | None] = []
+        missing_texts: List[str] = []
+        missing_indices: List[int] = []
+
+        for idx, text in enumerate(texts):
+            cached_emb = self.cache.get(model_key, text)
+            if cached_emb is not None:
+                cached.append(cached_emb)
+            else:
+                cached.append(None)
+                missing_texts.append(text)
+                missing_indices.append(idx)
+
+        embedder = None
+        if missing_texts:
+            embedder = build_embedder(emb_spec)
+            try:
+                new_vecs, _ = embedder.embed(missing_texts, desc=f"embed[{emb_spec.name}]")
+                for idx, vec in zip(missing_indices, new_vecs):
+                    cached[idx] = vec
+                    self.cache.add(model_key, texts[idx], vec)
+            finally:
+                if embedder is not None:
+                    embedder.close()
+
+        if any(vec is None for vec in cached):
+            raise RuntimeError(f"[runner] Missing embeddings after cache fill for model={model_key}")
+
+        embeddings = np.vstack(
+            [np.asarray(vec, dtype=np.float32).reshape(1, -1) for vec in cached]
+        )
 
         dt_total = time.time() - t0_total
-        return X, float(dt_total)
+        return embeddings, float(dt_total)
 
     def run(self) -> str:
         results: Dict[str, Any] = {

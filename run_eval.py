@@ -9,6 +9,7 @@ import yaml
 
 from embfirewall.data.loaders import _list_label_files, interleave_label_files
 from embfirewall.embeddings import EmbeddingSpec
+from embfirewall.embeddings.cache import EmbeddingCache
 from embfirewall.runner import DatasetSlices, ExperimentRunner, RunConfig
 
 
@@ -311,6 +312,9 @@ def run_eval(
     run_root.mkdir(parents=True, exist_ok=True)
     print(f"\n[run] run_root={run_root}")
 
+    cache_dir = data_dir_path.parent / "cache"
+    cache = EmbeddingCache(cache_dir)
+
     embeddings_all = _parse_embeddings(eval_cfg)
     available_model_ids = [e.model_id for e in embeddings_all]
     print(f"[run] available model_ids: {available_model_ids}")
@@ -345,103 +349,106 @@ def run_eval(
     sup_list = _filter_detectors_by_runtime(det_cfg.get("supervised"))
     unsup_pos_labels_t = (malicious_label, borderline_label)
 
-    for dataset_name, dataset_dir in dataset_dirs:
-        print(f"\n[run] DATASET={dataset_name} at {dataset_dir}")
+    try:
+        for dataset_name, dataset_dir in dataset_dirs:
+            print(f"\n[run] DATASET={dataset_name} at {dataset_dir}")
 
-        print("[run] Loading train_texts (normal only)")
-        train_texts = _load_train_normal(
-            str(dataset_dir),
-            seed=seed,
-            cap=max_train_normal_i,
-            max_chars=max_chars_i,
-            normal_label=normal_label,
-        )
-        print(f"[run] train_texts loaded: {len(train_texts)}")
-
-        print("[run] Loading val (normal + malicious)")
-        val_texts, val_labels = _load_val(
-            str(dataset_dir),
-            seed=seed + 1,
-            cap=max_val_total_i,
-            max_chars=max_chars_i,
-            normal_label=normal_label,
-            malicious_label=malicious_label,
-        )
-        print(f"[run] val loaded: n={len(val_texts)} counts={_counts(val_labels)}")
-
-        print("[run] Loading test (normal + borderline + malicious)")
-        test_texts, test_labels = _load_test(
-            str(dataset_dir),
-            seed=seed + 2,
-            cap=max_test_total_i,
-            max_chars=max_chars_i,
-            normal_label=normal_label,
-            borderline_label=borderline_label,
-            malicious_label=malicious_label,
-        )
-        print(f"[run] test loaded: n={len(test_texts)} counts={_counts(test_labels)}")
-
-        data = DatasetSlices(
-            train_texts=train_texts,
-            val_texts=val_texts,
-            val_labels=val_labels,
-            test_texts=test_texts,
-            test_labels=test_labels,
-        )
-
-        dataset_run_dir = run_root / dataset_name
-        dataset_run_dir.mkdir(parents=True, exist_ok=True)
-
-        for emb_spec in embeddings:
-            model_dir_name = emb_spec.model_id.replace("/", "_")
-            model_run_dir = dataset_run_dir / model_dir_name
-            results_path = model_run_dir / "results.json"
-
-            if results_path.exists():
-                print(
-                    f"[run] Skipping model_id={emb_spec.model_id} for dataset={dataset_name}; results already exist"
-                )
-                continue
-
-            if model_run_dir.exists():
-                print(
-                    f"[run] Removing partial/old run directory for model_id={emb_spec.model_id} at {model_run_dir}"
-                )
-                shutil.rmtree(model_run_dir)
-
-            random_search_trials = (
-                CHEAP_RANDOM_SEARCH_TRIALS
-                if enable_random_search and emb_spec.kind in CHEAP_EMBED_KINDS
-                else 0
+            print("[run] Loading train_texts (normal only)")
+            train_texts = _load_train_normal(
+                str(dataset_dir),
+                seed=seed,
+                cap=max_train_normal_i,
+                max_chars=max_chars_i,
+                normal_label=normal_label,
             )
-            if random_search_trials > 0:
-                print(
-                    f"[run] enabling random search trials={random_search_trials} for cheap embedding kind={emb_spec.kind}"
-                )
+            print(f"[run] train_texts loaded: {len(train_texts)}")
 
-            cfg = RunConfig(
-                run_dir=str(model_run_dir),
+            print("[run] Loading val (normal + malicious)")
+            val_texts, val_labels = _load_val(
+                str(dataset_dir),
+                seed=seed + 1,
+                cap=max_val_total_i,
+                max_chars=max_chars_i,
+                normal_label=normal_label,
+                malicious_label=malicious_label,
+            )
+            print(f"[run] val loaded: n={len(val_texts)} counts={_counts(val_labels)}")
+
+            print("[run] Loading test (normal + borderline + malicious)")
+            test_texts, test_labels = _load_test(
+                str(dataset_dir),
+                seed=seed + 2,
+                cap=max_test_total_i,
+                max_chars=max_chars_i,
                 normal_label=normal_label,
                 borderline_label=borderline_label,
                 malicious_label=malicious_label,
-                fpr_points=fpr_points_t,
-                embedding_models=[emb_spec],
-                enable_keyword=enable_keyword,
-                enable_unsupervised=enable_unsup,
-                enable_supervised=enable_sup,
-                enable_random_search=enable_random_search,
-                unsupervised_detectors=(list(unsup_list) if isinstance(unsup_list, list) else None),
-                supervised_detectors=(list(sup_list) if isinstance(sup_list, list) else None),
-                unsupervised_positive_labels=unsup_pos_labels_t,
-                keyword_patterns=(list(keyword_patterns) if isinstance(keyword_patterns, list) else None),
-                dataset_name=dataset_name,
-                random_search_trials=random_search_trials,
+            )
+            print(f"[run] test loaded: n={len(test_texts)} counts={_counts(test_labels)}")
+
+            data = DatasetSlices(
+                train_texts=train_texts,
+                val_texts=val_texts,
+                val_labels=val_labels,
+                test_texts=test_texts,
+                test_labels=test_labels,
             )
 
-            runner = ExperimentRunner(cfg, data)
-            runner.run()
+            dataset_run_dir = run_root / dataset_name
+            dataset_run_dir.mkdir(parents=True, exist_ok=True)
 
-            print(f"[run] Saved results for {emb_spec.model_id}: {model_run_dir / 'results.json'}")
+            for emb_spec in embeddings:
+                model_dir_name = emb_spec.model_id.replace("/", "_")
+                model_run_dir = dataset_run_dir / model_dir_name
+                results_path = model_run_dir / "results.json"
+
+                if results_path.exists():
+                    print(
+                        f"[run] Skipping model_id={emb_spec.model_id} for dataset={dataset_name}; results already exist"
+                    )
+                    continue
+
+                if model_run_dir.exists():
+                    print(
+                        f"[run] Removing partial/old run directory for model_id={emb_spec.model_id} at {model_run_dir}"
+                    )
+                    shutil.rmtree(model_run_dir)
+
+                random_search_trials = (
+                    CHEAP_RANDOM_SEARCH_TRIALS
+                    if enable_random_search and emb_spec.kind in CHEAP_EMBED_KINDS
+                    else 0
+                )
+                if random_search_trials > 0:
+                    print(
+                        f"[run] enabling random search trials={random_search_trials} for cheap embedding kind={emb_spec.kind}"
+                    )
+
+                cfg = RunConfig(
+                    run_dir=str(model_run_dir),
+                    normal_label=normal_label,
+                    borderline_label=borderline_label,
+                    malicious_label=malicious_label,
+                    fpr_points=fpr_points_t,
+                    embedding_models=[emb_spec],
+                    enable_keyword=enable_keyword,
+                    enable_unsupervised=enable_unsup,
+                    enable_supervised=enable_sup,
+                    enable_random_search=enable_random_search,
+                    unsupervised_detectors=(list(unsup_list) if isinstance(unsup_list, list) else None),
+                    supervised_detectors=(list(sup_list) if isinstance(sup_list, list) else None),
+                    unsupervised_positive_labels=unsup_pos_labels_t,
+                    keyword_patterns=(list(keyword_patterns) if isinstance(keyword_patterns, list) else None),
+                    dataset_name=dataset_name,
+                    random_search_trials=random_search_trials,
+                )
+
+                runner = ExperimentRunner(cfg, data, cache=cache)
+                runner.run()
+
+                print(f"[run] Saved results for {emb_spec.model_id}: {model_run_dir / 'results.json'}")
+    finally:
+        cache.flush_all()
 
 
 if __name__ == "__main__":
