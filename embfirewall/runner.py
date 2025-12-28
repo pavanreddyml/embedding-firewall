@@ -4,7 +4,7 @@ import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 from sklearn.metrics import average_precision_score, roc_auc_score
@@ -400,21 +400,36 @@ class ExperimentRunner:
         base_spec: Dict[str, Any],
         X_train: np.ndarray,
         X_val: np.ndarray,
-    ) -> Tuple[Dict[str, Any], Optional[float], int]:
+        *,
+        record_trial: Optional[Callable[[Dict[str, Any]], None]] = None,
+    ) -> Tuple[Dict[str, Any], Optional[float], int, List[Dict[str, Any]]]:
         if self._is_expensive_detector(base_spec):
-            return base_spec, None, 0
+            return base_spec, None, 0, []
 
         trials = self._random_search_trials_for_spec(base_spec)
         if trials <= 0:
-            return base_spec, None, 0
+            return base_spec, None, 0, []
 
         best_spec = dict(base_spec)
         det = build_detector(best_spec)
+        trial_records: List[Dict[str, Any]] = []
+        trial_idx = 0
         try:
             det.fit(X_train)
             base_scores_val = det.score(X_val)
             best_metric = self._metric_value(self.val_y, base_scores_val)
             tried = 1
+            trial_records.append(
+                {
+                    "trial_index": trial_idx,
+                    "randomized": False,
+                    "metric": best_metric,
+                    "status": "ok",
+                    "spec": best_spec,
+                }
+            )
+            if record_trial is not None:
+                record_trial(trial_records[-1])
         finally:
             det.close()
 
@@ -425,6 +440,7 @@ class ExperimentRunner:
 
         for idx in range(trials):
             candidate = self._randomize_spec(base_spec)
+            trial_idx = idx + 1
             print(
                 f"[runner] random search unsup trial {idx + 1}/{trials} "
                 f"{candidate.get('name', candidate.get('type'))}: {self._fmt_spec(candidate)}"
@@ -436,17 +452,39 @@ class ExperimentRunner:
                 scores_val = det_c.score(X_val)
                 metric = self._metric_value(self.val_y, scores_val)
                 tried += 1
+                trial_records.append(
+                    {
+                        "trial_index": trial_idx,
+                        "randomized": True,
+                        "metric": metric,
+                        "status": "ok",
+                        "spec": candidate,
+                    }
+                )
+                if record_trial is not None:
+                    record_trial(trial_records[-1])
                 if metric > best_metric:
                     best_metric = metric
                     best_spec = candidate
             except Exception as exc:
                 print(f"[runner] random search unsup failed for {candidate}: {exc}")
+                trial_records.append(
+                    {
+                        "trial_index": trial_idx,
+                        "randomized": True,
+                        "metric": None,
+                        "status": f"error: {exc}",
+                        "spec": candidate,
+                    }
+                )
+                if record_trial is not None:
+                    record_trial(trial_records[-1])
                 continue
             finally:
                 if det_c is not None:
                     det_c.close()
 
-        return best_spec, best_metric, tried
+        return best_spec, best_metric, tried, trial_records
 
     def _maybe_random_search_sup(
         self,
@@ -455,21 +493,36 @@ class ExperimentRunner:
         y_fit: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-    ) -> Tuple[Dict[str, Any], Optional[float], int]:
+        *,
+        record_trial: Optional[Callable[[Dict[str, Any]], None]] = None,
+    ) -> Tuple[Dict[str, Any], Optional[float], int, List[Dict[str, Any]]]:
         if self._is_expensive_detector(base_spec):
-            return base_spec, None, 0
+            return base_spec, None, 0, []
 
         trials = self._random_search_trials_for_spec(base_spec)
         if trials <= 0:
-            return base_spec, None, 0
+            return base_spec, None, 0, []
 
         best_spec = dict(base_spec)
         det = build_detector(best_spec)
+        trial_records: List[Dict[str, Any]] = []
+        trial_idx = 0
         try:
             det.fit(X_fit, y_fit)
             base_scores_val = det.score(X_val)
             best_metric = self._metric_value(y_val, base_scores_val)
             tried = 1
+            trial_records.append(
+                {
+                    "trial_index": trial_idx,
+                    "randomized": False,
+                    "metric": best_metric,
+                    "status": "ok",
+                    "spec": best_spec,
+                }
+            )
+            if record_trial is not None:
+                record_trial(trial_records[-1])
         finally:
             det.close()
 
@@ -480,6 +533,7 @@ class ExperimentRunner:
 
         for idx in range(trials):
             candidate = self._randomize_spec(base_spec)
+            trial_idx = idx + 1
             print(
                 f"[runner] random search sup trial {idx + 1}/{trials} "
                 f"{candidate.get('name', candidate.get('type'))}: {self._fmt_spec(candidate)}"
@@ -491,17 +545,39 @@ class ExperimentRunner:
                 scores_val = det_c.score(X_val)
                 metric = self._metric_value(y_val, scores_val)
                 tried += 1
+                trial_records.append(
+                    {
+                        "trial_index": trial_idx,
+                        "randomized": True,
+                        "metric": metric,
+                        "status": "ok",
+                        "spec": candidate,
+                    }
+                )
+                if record_trial is not None:
+                    record_trial(trial_records[-1])
                 if metric > best_metric:
                     best_metric = metric
                     best_spec = candidate
             except Exception as exc:
                 print(f"[runner] random search sup failed for {candidate}: {exc}")
+                trial_records.append(
+                    {
+                        "trial_index": trial_idx,
+                        "randomized": True,
+                        "metric": None,
+                        "status": f"error: {exc}",
+                        "spec": candidate,
+                    }
+                )
+                if record_trial is not None:
+                    record_trial(trial_records[-1])
                 continue
             finally:
                 if det_c is not None:
                     det_c.close()
 
-        return best_spec, best_metric, tried
+        return best_spec, best_metric, tried, trial_records
 
     def _embed(self, emb_spec: EmbeddingSpec, texts: List[str]) -> Tuple[np.ndarray, float]:
         t0_total = time.time()
@@ -579,6 +655,7 @@ class ExperimentRunner:
             },
             "embeddings": {},
             "runs": [],
+            "tuning_trials": [],
         }
 
         out_path = ensure_parent_dir(self.run_dir / "results.json")
@@ -586,6 +663,32 @@ class ExperimentRunner:
         def write_results_snapshot() -> None:
             with open(out_path, "w", encoding="utf-8") as f:
                 json.dump(results, f, ensure_ascii=False, indent=2)
+
+        def log_tuning_trial(
+            *,
+            embedding: str,
+            detector_type: str,
+            base_name: str,
+            trial: Dict[str, Any],
+        ) -> None:
+            entry = {
+                "dataset": self.cfg.dataset_name,
+                "embedding": embedding,
+                "detector_type": detector_type,
+                "base_detector": base_name,
+                "trial_index": int(trial.get("trial_index", -1)),
+                "randomized": bool(trial.get("randomized", False)),
+                "metric_name": self.cfg.random_search_metric,
+                "metric_value": (
+                    float(trial["metric"])
+                    if trial.get("metric") is not None
+                    else None
+                ),
+                "status": trial.get("status", "unknown"),
+                "spec": trial.get("spec"),
+            }
+            results["tuning_trials"].append(entry)
+            write_results_snapshot()
 
         if self.cfg.enable_keyword:
             patterns = self.cfg.keyword_patterns or DEFAULT_PATTERNS
@@ -648,10 +751,23 @@ class ExperimentRunner:
             }
 
             if self.cfg.enable_unsupervised and self.cfg.unsupervised_detectors:
-                tuned_specs: List[Tuple[Dict[str, Any], Optional[float], int]] = []
+                tuned_specs: List[
+                    Tuple[Dict[str, Any], Optional[float], int, List[Dict[str, Any]]]
+                ] = []
                 for spec in self.cfg.unsupervised_detectors:
-                    best_spec, best_metric, tried = self._maybe_random_search_unsup(spec, X_train, X_val)
-                    tuned_specs.append((best_spec, best_metric, tried))
+                    base_name = spec.get("name", spec.get("type"))
+                    best_spec, best_metric, tried, trial_records = self._maybe_random_search_unsup(
+                        spec,
+                        X_train,
+                        X_val,
+                        record_trial=lambda trial, emb_name=emb_spec.name, base_name=base_name: log_tuning_trial(
+                            embedding=emb_name,
+                            detector_type="unsupervised",
+                            base_name=base_name,
+                            trial=trial,
+                        ),
+                    )
+                    tuned_specs.append((best_spec, best_metric, tried, trial_records))
 
                 det_bar = tqdm([s[0] for s in tuned_specs], desc=f"[runner] detectors (unsup) [{emb_spec.name}]", unit="det", leave=False)
                 for idx, spec in enumerate([s[0] for s in tuned_specs]):
@@ -684,6 +800,7 @@ class ExperimentRunner:
 
                     best_metric = tuned_specs[idx][1]
                     tried = tuned_specs[idx][2]
+                    trial_records = tuned_specs[idx][3]
 
                     results["runs"].append(
                         {
@@ -706,7 +823,20 @@ class ExperimentRunner:
                                 {
                                     "metric": self.cfg.random_search_metric,
                                     "best_val": (float(best_metric) if best_metric is not None else None),
-                                    "trials": int(tried),
+                                    "trials": [
+                                        {
+                                            "trial_index": int(t["trial_index"]),
+                                            "randomized": bool(t.get("randomized", False)),
+                                            "metric": (
+                                                float(t["metric"])
+                                                if t.get("metric") is not None
+                                                else None
+                                            ),
+                                            "status": t.get("status"),
+                                            "spec": t.get("spec"),
+                                        }
+                                        for t in trial_records
+                                    ],
                                 }
                                 if tried > 0
                                 else None
@@ -715,16 +845,25 @@ class ExperimentRunner:
                     )
 
             if self.cfg.enable_supervised and self.cfg.supervised_detectors:
-                tuned_specs: List[Tuple[Dict[str, Any], Optional[float], int]] = []
+                tuned_specs: List[
+                    Tuple[Dict[str, Any], Optional[float], int, List[Dict[str, Any]]]
+                ] = []
                 for spec in self.cfg.supervised_detectors:
-                    best_spec, best_metric, tried = self._maybe_random_search_sup(
+                    base_name = spec.get("name", spec.get("type"))
+                    best_spec, best_metric, tried, trial_records = self._maybe_random_search_sup(
                         spec,
                         X_val[self.sup_fit_idx],
                         self.val_y[self.sup_fit_idx],
                         X_val[self.sup_cal_idx],
                         self.val_y[self.sup_cal_idx],
+                        record_trial=lambda trial, emb_name=emb_spec.name, base_name=base_name: log_tuning_trial(
+                            embedding=emb_name,
+                            detector_type="supervised",
+                            base_name=base_name,
+                            trial=trial,
+                        ),
                     )
-                    tuned_specs.append((best_spec, best_metric, tried))
+                    tuned_specs.append((best_spec, best_metric, tried, trial_records))
 
                 det_bar = tqdm([s[0] for s in tuned_specs], desc=f"[runner] detectors (sup) [{emb_spec.name}]", unit="det", leave=False)
                 for idx, spec in enumerate([s[0] for s in tuned_specs]):
@@ -779,7 +918,20 @@ class ExperimentRunner:
                                 {
                                     "metric": self.cfg.random_search_metric,
                                     "best_val": (float(best_metric) if best_metric is not None else None),
-                                    "trials": int(tried),
+                                    "trials": [
+                                        {
+                                            "trial_index": int(t["trial_index"]),
+                                            "randomized": bool(t.get("randomized", False)),
+                                            "metric": (
+                                                float(t["metric"])
+                                                if t.get("metric") is not None
+                                                else None
+                                            ),
+                                            "status": t.get("status"),
+                                            "spec": t.get("spec"),
+                                        }
+                                        for t in trial_records
+                                    ],
                                 }
                                 if tried > 0
                                 else None
