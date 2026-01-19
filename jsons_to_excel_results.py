@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
-from typing import List, Sequence, Tuple
+from typing import Iterable, List, Sequence, Tuple
 
 from json_to_csv_results import _collect_records, _load_json, _write_excel
 
@@ -52,12 +53,23 @@ def convert_many(json_inputs: Sequence[str], output_excel: str) -> Path:
     return out_path
 
 
-def main() -> None:
-    json_inputs = [
-        "results/*.json",
-    ]
-    output = "results_summary.xlsx"
-    out_path = convert_many(json_inputs, output)
+def main(argv: Iterable[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        description="Merge multiple results JSON files into a single Excel workbook"
+    )
+    parser.add_argument(
+        "json_inputs",
+        nargs="+",
+        help="JSON files, directories, or glob patterns (e.g. results/**/*.json)",
+    )
+    parser.add_argument(
+        "--output",
+        default="results_summary.xlsx",
+        help="Output Excel file path (default: results_summary.xlsx)",
+    )
+    args = parser.parse_args(list(argv) if argv is not None else None)
+
+    out_path = convert_many(args.json_inputs, args.output)
     print(f"Wrote merged summaries to {out_path}")
 
 
