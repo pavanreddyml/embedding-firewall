@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import sys
+import argparse
 from pathlib import Path
 from typing import Iterable, List, Sequence, Tuple
 
@@ -53,29 +53,23 @@ def convert_many(json_inputs: Sequence[str], output_excel: str) -> Path:
     return out_path
 
 
-def _parse_args(argv: Iterable[str]) -> Tuple[List[str], str]:
-    args = list(argv)
-    if not args:
-        raise SystemExit(
-            "Usage: python jsons_to_excel_results.py <json inputs...> [--output <path>]"
-        )
-
-    output = "results_summary.xlsx"
-    if "--output" in args:
-        output_index = args.index("--output")
-        if output_index == len(args) - 1:
-            raise SystemExit("Missing value after --output")
-        output = args[output_index + 1]
-        del args[output_index : output_index + 2]
-
-    if not args:
-        raise SystemExit("Provide at least one JSON input path, directory, or glob")
-    return args, output
-
-
 def main(argv: Iterable[str] | None = None) -> None:
-    json_inputs, output = _parse_args(argv if argv is not None else sys.argv[1:])
-    out_path = convert_many(json_inputs, output)
+    parser = argparse.ArgumentParser(
+        description="Merge multiple results JSON files into a single Excel workbook"
+    )
+    parser.add_argument(
+        "json_inputs",
+        nargs="+",
+        help="JSON files, directories, or glob patterns (e.g. results/**/*.json)",
+    )
+    parser.add_argument(
+        "--output",
+        default="results_summary.xlsx",
+        help="Output Excel file path (default: results_summary.xlsx)",
+    )
+    args = parser.parse_args(list(argv) if argv is not None else None)
+
+    out_path = convert_many(args.json_inputs, args.output)
     print(f"Wrote merged summaries to {out_path}")
 
 
