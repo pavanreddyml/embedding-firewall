@@ -78,7 +78,18 @@ def _list_label_files(data_dir: Path, label: str) -> List[Path]:
     Prefer shards: <label>-00000.json, <label>-00001.json, ...
     Else single: <label>.json
     """
-    shards = sorted(p for p in data_dir.glob(f"{label}-*.json") if p.is_file())
+    try:
+        if not data_dir.exists():
+            return []
+        if not data_dir.is_dir():
+            return []
+    except OSError as e:
+        raise FileNotFoundError(f"{data_dir} is not accessible: {e}") from e
+
+    try:
+        shards = sorted(p for p in data_dir.glob(f"{label}-*.json") if p.is_file())
+    except OSError as e:
+        raise FileNotFoundError(f"{data_dir} is not accessible: {e}") from e
     if shards:
         return shards
 
@@ -87,14 +98,17 @@ def _list_label_files(data_dir: Path, label: str) -> List[Path]:
         return [single]
 
     nested_dir = data_dir / label
-    if nested_dir.is_dir():
-        shards = sorted(p for p in nested_dir.glob(f"{label}-*.json") if p.is_file())
-        if shards:
-            return shards
+    try:
+        if nested_dir.is_dir():
+            shards = sorted(p for p in nested_dir.glob(f"{label}-*.json") if p.is_file())
+            if shards:
+                return shards
 
-        single = nested_dir / f"{label}.json"
-        if single.exists():
-            return [single]
+            single = nested_dir / f"{label}.json"
+            if single.exists():
+                return [single]
+    except OSError as e:
+        raise FileNotFoundError(f"{nested_dir} is not accessible: {e}") from e
 
     return []
 
